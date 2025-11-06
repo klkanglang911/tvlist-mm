@@ -11,6 +11,8 @@ export default function DashboardPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [batchContent, setBatchContent] = useState('');
 
   // 表单状态
   const [formData, setFormData] = useState({
@@ -45,6 +47,13 @@ export default function DashboardPage() {
   const handleAddChannel = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // 批量模式
+    if (isBatchMode) {
+      await handleBatchAdd();
+      return;
+    }
+
+    // 单个添加
     try {
       const response = await fetch('/api/channels', {
         method: 'POST',
@@ -64,6 +73,91 @@ export default function DashboardPage() {
       }
     } catch (error) {
       alert('网络错误');
+    }
+  };
+
+  const handleBatchAdd = async () => {
+    if (!batchContent.trim()) {
+      alert('请输入要添加的频道');
+      return;
+    }
+
+    const defaultCategory = formData.category || '其他';
+    const lines = batchContent.trim().split('\n');
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      // 解析格式：支持 "名称,URL" 和 "名称 URL"
+      let name = '';
+      let url = '';
+
+      const commaMatch = trimmedLine.match(/^([^,]+),(.+)$/);
+      const spaceMatch = trimmedLine.match(/^(\S+)\s+(https?:\/\/.+)$/);
+
+      if (commaMatch) {
+        name = commaMatch[1].trim();
+        url = commaMatch[2].trim();
+      } else if (spaceMatch) {
+        name = spaceMatch[1].trim();
+        url = spaceMatch[2].trim();
+      } else {
+        failCount++;
+        errors.push(`格式错误: ${trimmedLine.substring(0, 30)}...`);
+        continue;
+      }
+
+      if (!name || !url) {
+        failCount++;
+        errors.push(`缺少字段: ${trimmedLine.substring(0, 30)}...`);
+        continue;
+      }
+
+      try {
+        const response = await fetch('/api/channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            url,
+            category: defaultCategory,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          successCount++;
+          setChannels(prev => [...prev, data.data]);
+        } else {
+          failCount++;
+          errors.push(`${name}: ${data.error}`);
+        }
+      } catch (error) {
+        failCount++;
+        errors.push(`${name}: 网络错误`);
+      }
+    }
+
+    // 显示结果
+    let message = `批量添加完成！\n成功: ${successCount} 个\n失败: ${failCount} 个`;
+    if (errors.length > 0 && errors.length <= 5) {
+      message += '\n\n失败原因:\n' + errors.join('\n');
+    } else if (errors.length > 5) {
+      message += '\n\n部分失败原因:\n' + errors.slice(0, 5).join('\n') + `\n...还有 ${errors.length - 5} 个错误`;
+    }
+
+    alert(message);
+
+    if (successCount > 0) {
+      setShowAddModal(false);
+      setBatchContent('');
+      setFormData({ name: '', url: '', category: '' });
+      await fetchData(); // 刷新列表
     }
   };
 
@@ -252,36 +346,92 @@ export default function DashboardPage() {
       {/* 添加/编辑模态框 */}
       {(showAddModal || editingChannel) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold mb-6">
-              {editingChannel ? '编辑频道' : '添加频道'}
-            </h3>
+          <div className="bg-white rounded-lg p-8 max-w-2xl w-full mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold">
+                {editingChannel ? '编辑频道' : '添加频道'}
+              </h3>
+
+              {/* 模式切换开关（仅在添加模式下显示） */}
+              {!editingChannel && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">单个</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsBatchMode(!isBatchMode)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      isBatchMode ? 'bg-indigo-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        isBatchMode ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-gray-600">批量</span>
+                </div>
+              )}
+            </div>
 
             <form onSubmit={editingChannel ? handleUpdateChannel : handleAddChannel} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">频道名称</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  required
-                />
-              </div>
+              {/* 单个模式表单 */}
+              {!isBatchMode && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">频道名称</label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      required
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">直播源 URL</label>
-                <input
-                  type="url"
-                  value={formData.url}
-                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                  required
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">直播源 URL</label>
+                    <input
+                      type="url"
+                      value={formData.url}
+                      onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      required
+                    />
+                  </div>
+                </>
+              )}
 
+              {/* 批量模式表单 */}
+              {isBatchMode && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    批量添加频道
+                    <span className="text-xs text-gray-500 ml-2">
+                      (每行一个，格式：频道名称,URL 或 频道名称 URL)
+                    </span>
+                  </label>
+                  <textarea
+                    value={batchContent}
+                    onChange={(e) => setBatchContent(e.target.value)}
+                    rows={12}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-sm"
+                    placeholder="示例：&#10;CCTV-1,http://example.com/cctv1.m3u8&#10;CCTV-2 http://example.com/cctv2.m3u8"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 支持格式：<br />
+                    • 逗号分隔：CCTV-1,http://example.com/cctv1.m3u8<br />
+                    • 空格分隔：CCTV-1 http://example.com/cctv1.m3u8
+                  </p>
+                </div>
+              )}
+
+              {/* 分类选择（两种模式都需要） */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">分类</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {isBatchMode ? '默认分类' : '分类'}
+                </label>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
@@ -302,6 +452,8 @@ export default function DashboardPage() {
                     setShowAddModal(false);
                     setEditingChannel(null);
                     setFormData({ name: '', url: '', category: '' });
+                    setIsBatchMode(false);
+                    setBatchContent('');
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                 >
