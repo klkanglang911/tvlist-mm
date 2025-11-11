@@ -4,12 +4,20 @@
 export function verifyPassword(password: string): boolean {
   const adminPassword = process.env.ADMIN_PASSWORD;
 
+  // 临时调试日志
+  console.log('[Auth Debug] 环境变量 ADMIN_PASSWORD:', adminPassword ? '已设置' : '未设置');
+  console.log('[Auth Debug] 输入密码:', password);
+
+  // 如果环境变量未设置，使用备用密码
+  const finalPassword = adminPassword || 'Capibalaa@0711';
+
+  console.log('[Auth Debug] 使用的密码:', finalPassword.substring(0, 3) + '***');
+
   if (!adminPassword) {
-    console.warn('警告: 未设置 ADMIN_PASSWORD 环境变量');
-    return false;
+    console.warn('警告: 未设置 ADMIN_PASSWORD 环境变量，使用备用密码');
   }
 
-  return password === adminPassword;
+  return password === finalPassword;
 }
 
 /**
