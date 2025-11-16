@@ -76,13 +76,6 @@ export default function LoginPage() {
               {loading ? '登录中...' : '登录'}
             </button>
           </form>
-
-          <div className="mt-6 text-center text-sm text-gray-500">
-            <p>公开访问地址：</p>
-            <code className="text-xs bg-gray-100 px-2 py-1 rounded mt-1 inline-block">
-              {typeof window !== 'undefined' ? window.location.origin : ''}/tv.txt
-            </code>
-          </div>
         </div>
       </div>
     </div>
