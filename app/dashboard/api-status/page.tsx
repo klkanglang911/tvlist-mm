@@ -187,7 +187,7 @@ export default function ApiStatusPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-blue-800 mb-3">💡 使用建议</h3>
             <ul className="space-y-2 text-blue-700 text-sm">
-              <li>• <strong>批量导入</strong>：使用"导入导出"页面一次性导入多个频道，只消耗 1 次 API 配额</li>
+              <li>• <strong>批量导入</strong>：使用&ldquo;导入导出&rdquo;页面一次性导入多个频道，只消耗 1 次 API 配额</li>
               <li>• <strong>避免频繁操作</strong>：添加、编辑、删除操作都会消耗 API 配额</li>
               <li>• <strong>查看操作免费</strong>：浏览频道列表、分类等不消耗配额</li>
               <li>• <strong>导出免费</strong>：导出 TXT/M3U 文件会消耗配额（需要读取数据）</li>
