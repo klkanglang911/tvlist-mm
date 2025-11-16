@@ -75,9 +75,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('添加分类失败:', error);
+    const errorMessage = error instanceof Error ? error.message : '添加分类失败';
     return NextResponse.json<ApiResponse>({
       success: false,
-      error: '添加分类失败',
+      error: errorMessage,
     }, { status: 500 });
   }
 }
