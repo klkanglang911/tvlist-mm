@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
@@ -9,18 +10,26 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // 添加客户端验证脚本
+  useEffect(() => {
+    // 内联客户端验证函数
+    window.clientLogin = function(pwd) {
+      const correctPassword = 'REDACTED_PASSWORD';
+      return pwd === correctPassword;
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      // 备用客户端验证
-      const correctPassword = 'REDACTED_PASSWORD';
-
-      if (password === correctPassword) {
-        // 设置简单的客户端 session
-        document.cookie = `auth_token=${Buffer.from(`${Date.now()}-valid`).toString('base64')}; path=/; max-age=86400`;
+      // 使用内联客户端验证
+      if (window.clientLogin && window.clientLogin(password)) {
+        // 设置客户端 session
+        const token = btoa(`${Date.now()}-valid`);
+        document.cookie = `auth_token=${token}; path=/; max-age=86400`;
         router.push('/dashboard');
       } else {
         setError('密码错误');
@@ -33,9 +42,50 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-md w-full mx-4">
-        <div className="bg-white rounded-lg shadow-xl p-8">
+    <>
+      {/* 内联客户端验证脚本 */}
+      <script dangerouslySetInnerHTML={{
+        __html: `
+          function handleClientLogin(password) {
+            const correctPassword = 'REDACTED_PASSWORD';
+            if (password === correctPassword) {
+              // 设置客户端 session
+              const token = btoa(Date.now() + '-valid');
+              document.cookie = 'auth_token=' + token + '; path=/; max-age=86400';
+              window.location.href = '/dashboard';
+              return true;
+            }
+            return false;
+          }
+
+          // 覆盖表单提交处理
+          document.addEventListener('DOMContentLoaded', function() {
+            const form = document.querySelector('form');
+            if (form) {
+              form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const password = document.getElementById('password').value;
+                const errorDiv = document.querySelector('.bg-red-50');
+                const button = document.querySelector('button[type="submit"]');
+
+                if (handleClientLogin(password)) {
+                  button.disabled = true;
+                  button.textContent = '登录中...';
+                } else {
+                  if (errorDiv) {
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = '密码错误';
+                  }
+                }
+              });
+            }
+          });
+        `
+      }} />
+
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               电视直播源管理系统
@@ -76,5 +126,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
