@@ -15,21 +15,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
+      // 备用客户端验证
+      const correctPassword = 'REDACTED_PASSWORD';
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (password === correctPassword) {
+        // 设置简单的客户端 session
+        document.cookie = `auth_token=${Buffer.from(`${Date.now()}-valid`).toString('base64')}; path=/; max-age=86400`;
         router.push('/dashboard');
       } else {
-        setError(data.error || '登录失败');
+        setError('密码错误');
       }
     } catch (err) {
-      setError('网络错误，请重试');
+      setError('登录失败，请重试');
     } finally {
       setLoading(false);
     }
