@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [batchContent, setBatchContent] = useState('');
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set());
 
   // 表单状态
   const [formData, setFormData] = useState({
@@ -183,6 +184,54 @@ export default function DashboardPage() {
     });
   };
 
+  const handleToggleChannel = (channelId: string) => {
+    const newSelected = new Set(selectedChannels);
+    if (newSelected.has(channelId)) {
+      newSelected.delete(channelId);
+    } else {
+      newSelected.add(channelId);
+    }
+    setSelectedChannels(newSelected);
+  };
+
+  const handleToggleAll = () => {
+    if (selectedChannels.size === filteredChannels.length) {
+      setSelectedChannels(new Set());
+    } else {
+      setSelectedChannels(new Set(filteredChannels.map(ch => ch.id)));
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedChannels.size === 0) {
+      alert('请至少选择一个频道');
+      return;
+    }
+
+    if (!confirm(`确定要删除选中的 ${selectedChannels.size} 个频道吗？`)) return;
+
+    try {
+      const deletePromises = Array.from(selectedChannels).map(id =>
+        fetch(`/api/channels?id=${id}`, { method: 'DELETE' })
+      );
+
+      const results = await Promise.all(deletePromises);
+      const allSuccess = results.every(res => res.ok);
+
+      if (allSuccess) {
+        setChannels(channels.filter(ch => !selectedChannels.has(ch.id)));
+        setSelectedChannels(new Set());
+        alert(`成功删除 ${selectedChannels.size} 个频道`);
+      } else {
+        alert('部分频道删除失败，请重试');
+        await fetchData();
+      }
+    } catch (error) {
+      alert('网络错误');
+      await fetchData();
+    }
+  };
+
   const filteredChannels = channels.filter(channel => {
     const matchesCategory = selectedCategory === 'all' || channel.category === selectedCategory;
     const matchesSearch = channel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -197,7 +246,17 @@ export default function DashboardPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">频道管理</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold text-gray-900">频道管理</h2>
+          {selectedChannels.size > 0 && (
+            <button
+              onClick={handleBatchDelete}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition text-sm"
+            >
+              删除选中 ({selectedChannels.size})
+            </button>
+          )}
+        </div>
         <button
           onClick={() => setShowAddModal(true)}
           className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition"
@@ -241,6 +300,14 @@ export default function DashboardPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-6 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={filteredChannels.length > 0 && selectedChannels.size === filteredChannels.length}
+                    onChange={handleToggleAll}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   频道名称
                 </th>
@@ -258,13 +325,21 @@ export default function DashboardPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredChannels.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                     暂无频道数据
                   </td>
                 </tr>
               ) : (
                 filteredChannels.map((channel) => (
                   <tr key={channel.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedChannels.has(channel.id)}
+                        onChange={() => handleToggleChannel(channel.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{channel.name}</div>
                     </td>

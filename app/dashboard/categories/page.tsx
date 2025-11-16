@@ -105,6 +105,42 @@ export default function CategoriesPage() {
     }
   };
 
+  const handleMoveCategory = async (index: number, direction: 'up' | 'down') => {
+    const newCategories = [...categories];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+    if (targetIndex < 0 || targetIndex >= newCategories.length) return;
+
+    // 交换位置
+    [newCategories[index], newCategories[targetIndex]] = [newCategories[targetIndex], newCategories[index]];
+
+    // 更新 order 字段
+    newCategories.forEach((cat, idx) => {
+      cat.order = idx;
+    });
+
+    setCategories(newCategories);
+
+    // 保存到后端
+    try {
+      const response = await fetch('/api/categories/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categories: newCategories }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        alert(data.error || '排序失败');
+        fetchCategories(); // 重新获取数据
+      }
+    } catch (error) {
+      alert('网络错误');
+      fetchCategories(); // 重新获取数据
+    }
+  };
+
   const openEditModal = (category: Category) => {
     setEditingCategory(category);
     setFormName(category.name);
@@ -127,24 +163,45 @@ export default function CategoriesPage() {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-          {categories.map((category) => (
+        <div className="grid grid-cols-1 gap-3 p-6">
+          {categories.map((category, index) => (
             <div
               key={category.id}
-              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition"
+              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition flex items-center gap-4"
             >
-              <div className="flex items-center justify-between">
+              {/* 排序按钮 */}
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => handleMoveCategory(index, 'up')}
+                  disabled={index === 0}
+                  className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="上移"
+                >
+                  ▲
+                </button>
+                <button
+                  onClick={() => handleMoveCategory(index, 'down')}
+                  disabled={index === categories.length - 1}
+                  className="text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="下移"
+                >
+                  ▼
+                </button>
+              </div>
+
+              {/* 分类信息 */}
+              <div className="flex-1 flex items-center justify-between">
                 <h3 className="text-lg font-medium text-gray-900">{category.name}</h3>
                 <div className="flex gap-2">
                   <button
                     onClick={() => openEditModal(category)}
-                    className="text-indigo-600 hover:text-indigo-900 text-sm"
+                    className="text-indigo-600 hover:text-indigo-900 text-sm px-3 py-1"
                   >
                     编辑
                   </button>
                   <button
                     onClick={() => handleDeleteCategory(category.id)}
-                    className="text-red-600 hover:text-red-900 text-sm"
+                    className="text-red-600 hover:text-red-900 text-sm px-3 py-1"
                   >
                     删除
                   </button>
