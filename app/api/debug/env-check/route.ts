@@ -17,11 +17,15 @@ export async function GET(request: NextRequest) {
 
   const envCheck = {
     GITHUB_TOKEN: process.env.GITHUB_TOKEN ? '✅ 已设置' : '❌ 未设置',
-    GITHUB_OWNER: process.env.GITHUB_OWNER || '❌ 未设置',
-    GITHUB_REPO: process.env.GITHUB_REPO || '❌ 未设置',
-    GITHUB_BRANCH: process.env.GITHUB_BRANCH || '(使用默认值: main)',
-    GITHUB_DATA_PATH: process.env.GITHUB_DATA_PATH || '(使用默认值: data/channels.json)',
+    GITHUB_OWNER: (process.env.GITHUB_OWNER || '❌ 未设置').trim(),
+    GITHUB_REPO: (process.env.GITHUB_REPO || '❌ 未设置').trim(),
+    GITHUB_BRANCH: (process.env.GITHUB_BRANCH || '(使用默认值: main)').trim(),
+    GITHUB_DATA_PATH: (process.env.GITHUB_DATA_PATH || '(使用默认值: data/channels.json)').trim(),
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ? '✅ 已设置' : '❌ 未设置',
+    _raw: {
+      GITHUB_OWNER_length: process.env.GITHUB_OWNER?.length || 0,
+      GITHUB_OWNER_trimmed_length: (process.env.GITHUB_OWNER || '').trim().length,
+    }
   };
 
   return NextResponse.json({
