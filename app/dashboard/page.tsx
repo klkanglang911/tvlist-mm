@@ -211,19 +211,23 @@ export default function DashboardPage() {
     if (!confirm(`确定要删除选中的 ${selectedChannels.size} 个频道吗？`)) return;
 
     try {
-      const deletePromises = Array.from(selectedChannels).map(id =>
-        fetch(`/api/channels?id=${id}`, { method: 'DELETE' })
-      );
+      // 使用批量删除 API，只消耗 1 次 GitHub API 配额
+      const response = await fetch('/api/channels/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: Array.from(selectedChannels),
+        }),
+      });
 
-      const results = await Promise.all(deletePromises);
-      const allSuccess = results.every(res => res.ok);
+      const data = await response.json();
 
-      if (allSuccess) {
+      if (data.success) {
         setChannels(channels.filter(ch => !selectedChannels.has(ch.id)));
         setSelectedChannels(new Set());
-        alert(`成功删除 ${selectedChannels.size} 个频道`);
+        alert(data.message || `成功删除 ${selectedChannels.size} 个频道`);
       } else {
-        alert('部分频道删除失败，请重试');
+        alert(data.error || '批量删除失败');
         await fetchData();
       }
     } catch (error) {
