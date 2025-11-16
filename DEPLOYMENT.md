@@ -187,6 +187,12 @@ https://github.com/你的用户名/tvlist-data
 - **GITHUB_REPO**: 数据仓库名称
   - 示例：`tvlist-data`
 
+- **TV_TXT_ACCESS_KEY**: TV.TXT 访问密钥（v1.2.0 新增）
+  - 示例：`my-secret-key-2024`
+  - 用于保护 /tv.txt 端点访问
+  - 建议使用随机字符串（如 UUID）
+  - 访问 URL 格式：`https://your-domain.com/tv.txt?key=your-secret-key`
+
 ### 可选变量
 
 - **GITHUB_BRANCH**: Git 分支
@@ -196,6 +202,58 @@ https://github.com/你的用户名/tvlist-data
 - **GITHUB_DATA_PATH**: 数据文件路径
   - 默认：`data/channels.json`
   - 可以自定义路径
+
+- **TV_TXT_SECONDARY_KEYS**: 额外的访问密钥（v1.2.0 新增）
+  - 示例：`friend-key-1,friend-key-2,friend-key-3`
+  - 用于分享给朋友或多个设备
+  - 逗号分隔多个密钥
+  - 可以随时添加或删除单个密钥
+
+- **TV_TXT_RATE_LIMIT**: 速率限制（v1.2.0 新增）
+  - 默认：`60`
+  - 每个 IP 地址每小时允许的最大请求次数
+  - 防止爬虫大量抓取
+
+### TV.TXT 访问保护说明
+
+从 v1.2.0 开始，tv.txt 端点需要访问密钥才能访问，以防止：
+- 被自动化爬虫大量抓取
+- 直播源被他人盗用
+- 隐私泄露
+- 恶意攻击
+
+**配置步骤：**
+
+1. 在 Vercel 环境变量中添加 `TV_TXT_ACCESS_KEY`
+2. 建议使用随机字符串作为密钥，例如：
+   ```bash
+   # 生成随机密钥示例
+   uuidgen  # macOS/Linux
+   # 或使用在线 UUID 生成器
+   ```
+3. 访问 TV.TXT 时需要在 URL 中包含密钥：
+   ```
+   https://your-domain.com/tv.txt?key=your-secret-key
+   ```
+4. 在管理后台侧边栏可以看到完整的访问 URL
+
+**分享给朋友：**
+
+如果需要分享给朋友，可以：
+- 方式 1：直接分享主密钥的完整 URL（简单但不能单独撤销）
+- 方式 2：创建单独的副密钥并添加到 `TV_TXT_SECONDARY_KEYS`（推荐，可单独撤销）
+
+**撤销访问：**
+
+- 撤销主密钥：修改 `TV_TXT_ACCESS_KEY` 并重新部署
+- 撤销副密钥：从 `TV_TXT_SECONDARY_KEYS` 中删除对应密钥并重新部署
+
+**安全建议：**
+
+- 不要使用简单的密钥（如 `123456`、`password` 等）
+- 不要在公开场合分享完整的访问 URL
+- 定期更换密钥
+- 为不同的人员使用不同的副密钥，便于管理
 
 ## 更新部署
 
