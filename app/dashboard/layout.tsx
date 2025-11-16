@@ -50,6 +50,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: '分类管理', path: '/dashboard/categories', icon: '📁' },
     { name: '导入导出', path: '/dashboard/import-export', icon: '📤' },
     { name: '版本历史', path: '/dashboard/versions', icon: '🕐' },
+    { name: 'API 状态', path: '/dashboard/api-status', icon: '⚡' },
   ];
 
   return (
