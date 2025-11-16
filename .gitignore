@@ -50,4 +50,5 @@ test-*.sh
 .local-only/
 deploy-to-vercel.sh
 DEPLOY_QUICK_GUIDE.md
+LOCAL-SENSITIVE-FILES-README.md
 *-local.md
