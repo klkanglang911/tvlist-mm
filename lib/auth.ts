@@ -2,12 +2,9 @@
  * 简单的密码验证
  */
 export function verifyPassword(password: string): boolean {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  // 如果环境变量未设置，使用备用密码
-  const finalPassword = adminPassword || 'Capibalaa@0711';
-
-  return password === finalPassword;
+  // 临时硬编码确保登录正常
+  const correctPassword = 'Capibalaa@0711';
+  return password === correctPassword;
 }
 
 /**
