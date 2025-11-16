@@ -5,10 +5,10 @@ const octokit = new Octokit({
 });
 
 const GITHUB_CONFIG = {
-  owner: process.env.GITHUB_OWNER!,
-  repo: process.env.GITHUB_REPO!,
-  branch: process.env.GITHUB_BRANCH || 'main',
-  dataPath: process.env.GITHUB_DATA_PATH || 'data/channels.json',
+  owner: (process.env.GITHUB_OWNER || '').trim(),
+  repo: (process.env.GITHUB_REPO || '').trim(),
+  branch: (process.env.GITHUB_BRANCH || 'main').trim(),
+  dataPath: (process.env.GITHUB_DATA_PATH || 'data/channels.json').trim(),
 };
 
 export interface GitHubFile {
