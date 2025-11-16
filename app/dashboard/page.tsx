@@ -83,81 +83,43 @@ export default function DashboardPage() {
     }
 
     const defaultCategory = formData.category || '其他';
-    const lines = batchContent.trim().split('\n');
-    let successCount = 0;
-    let failCount = 0;
-    const errors: string[] = [];
 
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) continue;
+    try {
+      const response = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: batchContent,
+          mode: 'append',
+          defaultCategory,
+        }),
+      });
 
-      // 解析格式：支持 "名称,URL" 和 "名称 URL"
-      let name = '';
-      let url = '';
+      const data = await response.json();
 
-      const commaMatch = trimmedLine.match(/^([^,]+),(.+)$/);
-      const spaceMatch = trimmedLine.match(/^(\S+)\s+(https?:\/\/.+)$/);
+      if (data.success) {
+        const result = data.data;
+        let message = `批量添加完成！\n成功: ${result.imported} 个\n跳过: ${result.skipped} 个`;
 
-      if (commaMatch) {
-        name = commaMatch[1].trim();
-        url = commaMatch[2].trim();
-      } else if (spaceMatch) {
-        name = spaceMatch[1].trim();
-        url = spaceMatch[2].trim();
-      } else {
-        failCount++;
-        errors.push(`格式错误: ${trimmedLine.substring(0, 30)}...`);
-        continue;
-      }
-
-      if (!name || !url) {
-        failCount++;
-        errors.push(`缺少字段: ${trimmedLine.substring(0, 30)}...`);
-        continue;
-      }
-
-      try {
-        const response = await fetch('/api/channels', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name,
-            url,
-            category: defaultCategory,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          successCount++;
-          setChannels(prev => [...prev, data.data]);
-        } else {
-          failCount++;
-          errors.push(`${name}: ${data.error}`);
+        if (result.errors.length > 0 && result.errors.length <= 5) {
+          message += '\n\n错误:\n' + result.errors.join('\n');
+        } else if (result.errors.length > 5) {
+          message += '\n\n部分错误:\n' + result.errors.slice(0, 5).join('\n') + `\n...还有 ${result.errors.length - 5} 个错误`;
         }
-      } catch (error) {
-        failCount++;
-        errors.push(`${name}: 网络错误`);
+
+        alert(message);
+
+        if (result.imported > 0) {
+          setShowAddModal(false);
+          setBatchContent('');
+          setFormData({ name: '', url: '', category: '' });
+          await fetchData(); // 刷新列表
+        }
+      } else {
+        alert(data.error || '批量添加失败');
       }
-    }
-
-    // 显示结果
-    let message = `批量添加完成！\n成功: ${successCount} 个\n失败: ${failCount} 个`;
-    if (errors.length > 0 && errors.length <= 5) {
-      message += '\n\n失败原因:\n' + errors.join('\n');
-    } else if (errors.length > 5) {
-      message += '\n\n部分失败原因:\n' + errors.slice(0, 5).join('\n') + `\n...还有 ${errors.length - 5} 个错误`;
-    }
-
-    alert(message);
-
-    if (successCount > 0) {
-      setShowAddModal(false);
-      setBatchContent('');
-      setFormData({ name: '', url: '', category: '' });
-      await fetchData(); // 刷新列表
+    } catch (error) {
+      alert('网络错误');
     }
   };
 

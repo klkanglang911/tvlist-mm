@@ -17,7 +17,7 @@ export async function GET() {
     return new NextResponse(content, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'public, max-age=300', // 缓存 5 分钟
+        'Cache-Control': 'public, max-age=60', // 缓存 1 分钟
       },
     });
   } catch (error) {
