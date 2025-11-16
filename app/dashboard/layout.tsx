@@ -12,6 +12,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
+  const [tvTxtUrl, setTvTxtUrl] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -32,9 +34,41 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     checkAuth();
   }, [router]);
 
+  useEffect(() => {
+    // 获取带访问密钥的完整 URL
+    const getFullUrl = async () => {
+      try {
+        const response = await fetch('/api/tv-txt-url');
+        const data = await response.json();
+        if (data.success) {
+          setTvTxtUrl(data.url);
+        }
+      } catch (error) {
+        // 降级显示（没有密钥）
+        if (typeof window !== 'undefined') {
+          setTvTxtUrl(`${window.location.origin}/tv.txt?key=<未配置>`);
+        }
+      }
+    };
+
+    if (!loading) {
+      getFullUrl();
+    }
+  }, [loading]);
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
+  };
+
+  const handleCopyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(tvTxtUrl);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (error) {
+      alert('复制失败，请手动复制');
+    }
   };
 
   if (loading) {
@@ -89,11 +123,40 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </nav>
 
           <div className="p-4 border-t border-gray-200 mt-4">
-            <div className="text-xs text-gray-500 space-y-1">
-              <p className="font-medium">公开访问地址：</p>
-              <code className="block bg-gray-50 px-2 py-1 rounded text-xs break-all">
-                {typeof window !== 'undefined' ? window.location.origin : ''}/tv.txt
-              </code>
+            <div className="text-xs text-gray-500 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="font-medium">🔒 受保护的访问地址</p>
+                {copySuccess && (
+                  <span className="text-green-600 text-xs">✓ 已复制</span>
+                )}
+              </div>
+
+              <div className="relative">
+                <code className="block bg-gray-50 px-2 py-2 pr-16 rounded text-xs break-all border border-gray-200">
+                  {tvTxtUrl || '加载中...'}
+                </code>
+                <button
+                  onClick={handleCopyUrl}
+                  disabled={!tvTxtUrl}
+                  className="absolute right-1 top-1 px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 transition disabled:opacity-50"
+                  title="复制 URL"
+                >
+                  复制
+                </button>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mt-2">
+                <p className="text-yellow-800 text-xs">
+                  ⚠️ <strong>安全提示</strong>
+                </p>
+                <p className="text-yellow-700 text-xs mt-1">
+                  • 此 URL 包含访问密钥，请勿公开分享
+                  <br />
+                  • 仅分享给信任的人员
+                  <br />
+                  • 可在 Vercel 中修改密钥
+                </p>
+              </div>
             </div>
           </div>
         </aside>
