@@ -45,3 +45,9 @@ tv.txt
 
 # test scripts
 test-*.sh
+
+# local-only files (含敏感信息，不提交到远程仓库)
+.local-only/
+deploy-to-vercel.sh
+DEPLOY_QUICK_GUIDE.md
+*-local.md
