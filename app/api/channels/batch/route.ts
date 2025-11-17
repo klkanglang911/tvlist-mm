@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     });
 
     data.lastUpdated = new Date().toISOString();
-    await saveChannelData(data, '批量更新频道顺序');
+    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,

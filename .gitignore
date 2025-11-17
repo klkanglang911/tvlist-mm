@@ -45,6 +45,13 @@ tv.txt
 
 # test scripts
 test-*.sh
+diagnose-*.sh
+
+# SQLite database (用户数据，不提交)
+data/
+*.db
+*.db-shm
+*.db-wal
 
 # local-only files (含敏感信息，不提交到远程仓库)
 .local-only/

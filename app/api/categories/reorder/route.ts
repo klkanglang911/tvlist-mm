@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     data.categories = categories;
     data.lastUpdated = new Date().toISOString();
 
-    await saveChannelData(data, '调整分类顺序');
+    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,

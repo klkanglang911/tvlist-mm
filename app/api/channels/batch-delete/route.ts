@@ -49,12 +49,7 @@ export async function POST(request: NextRequest) {
 
     data.lastUpdated = new Date().toISOString();
 
-    // 只保存一次数据（只消耗 1 次 GitHub API 配额）
-    const commitMessage = deletedCount <= 5
-      ? `批量删除 ${deletedCount} 个频道: ${deletedNames.join(', ')}`
-      : `批量删除 ${deletedCount} 个频道`;
-
-    await saveChannelData(data, commitMessage);
+    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,

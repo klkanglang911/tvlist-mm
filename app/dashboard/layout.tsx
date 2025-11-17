@@ -83,8 +83,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: '频道管理', path: '/dashboard', icon: '📺' },
     { name: '分类管理', path: '/dashboard/categories', icon: '📁' },
     { name: '导入导出', path: '/dashboard/import-export', icon: '📤' },
-    { name: '版本历史', path: '/dashboard/versions', icon: '🕐' },
-    { name: 'API 状态', path: '/dashboard/api-status', icon: '⚡' },
+    { name: '密钥管理', path: '/dashboard/access-keys', icon: '🔑' },
   ];
 
   return (
@@ -154,7 +153,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <br />
                   • 仅分享给信任的人员
                   <br />
-                  • 可在 Vercel 中修改密钥
+                  • 可在密钥管理中修改密钥
                 </p>
               </div>
             </div>
