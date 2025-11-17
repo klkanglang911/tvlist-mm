@@ -2,14 +2,14 @@
 // 定时任务调度模块
 // ========================================
 
-import cron from 'node-cron';
+import cron, { ScheduledTask } from 'node-cron';
 import { ScheduleConfig, Channel } from '../types';
 import { getDatabase } from './database';
 import { testAllChannels, formatTestReport } from './channel-checker';
 import { sendAllWebhooks } from './webhook';
 
 // 定时任务实例
-let scheduledTask: cron.ScheduledTask | null = null;
+let scheduledTask: ScheduledTask | null = null;
 
 // 获取定时任务配置
 export function getScheduleConfig(): ScheduleConfig | null {
