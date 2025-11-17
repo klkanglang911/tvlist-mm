@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import type { Channel, Category } from '@/types';
+import { useEffect, useState, useCallback } from 'react';
+import type { Channel, Category, TestProgress, ScheduleConfig, WebhookConfig } from '@/types';
 
 export default function DashboardPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -15,6 +15,18 @@ export default function DashboardPage() {
   const [batchContent, setBatchContent] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set());
 
+  // 测试相关状态
+  const [testProgress, setTestProgress] = useState<TestProgress | null>(null);
+  const [showTestProgress, setShowTestProgress] = useState(false);
+
+  // 定时任务配置
+  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+
+  // Webhook 配置
+  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+  const [showWebhookModal, setShowWebhookModal] = useState(false);
+
   // 表单状态
   const [formData, setFormData] = useState({
     name: '',
@@ -25,6 +37,33 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // 轮询测试进度
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    if (testProgress?.status === 'running') {
+      intervalId = setInterval(async () => {
+        try {
+          const res = await fetch('/api/channels/test');
+          const data = await res.json();
+          if (data.success) {
+            setTestProgress(data.data);
+            if (data.data.status !== 'running') {
+              // 测试完成，刷新频道数据
+              await fetchData();
+            }
+          }
+        } catch (error) {
+          console.error('获取测试进度失败:', error);
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [testProgress?.status]);
 
   const fetchData = async () => {
     try {
@@ -42,6 +81,52 @@ export default function DashboardPage() {
       console.error('获取数据失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStartTest = async () => {
+    if (channels.length === 0) {
+      alert('没有频道可供测试');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/channels/test', {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setTestProgress({
+          total: data.total,
+          completed: 0,
+          results: [],
+          status: 'running',
+          startedAt: new Date().toISOString(),
+        });
+        setShowTestProgress(true);
+      } else {
+        alert(data.error || '启动测试失败');
+      }
+    } catch (error) {
+      alert('网络错误');
+    }
+  };
+
+  const handleCancelTest = async () => {
+    try {
+      const response = await fetch('/api/channels/test', {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        alert(data.error || '取消测试失败');
+      }
+    } catch (error) {
+      alert('网络错误');
     }
   };
 
@@ -211,7 +296,6 @@ export default function DashboardPage() {
     if (!confirm(`确定要删除选中的 ${selectedChannels.size} 个频道吗？`)) return;
 
     try {
-      // 使用批量删除 API，只消耗 1 次 GitHub API 配额
       const response = await fetch('/api/channels/batch-delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -236,12 +320,48 @@ export default function DashboardPage() {
     }
   };
 
+  const getStatusBadge = (channel: Channel) => {
+    const status = channel.status || 'unknown';
+    const colors = {
+      online: 'bg-green-100 text-green-800',
+      offline: 'bg-red-100 text-red-800',
+      unknown: 'bg-gray-100 text-gray-800',
+      checking: 'bg-yellow-100 text-yellow-800',
+    };
+    const labels = {
+      online: '在线',
+      offline: '离线',
+      unknown: '未检测',
+      checking: '检测中',
+    };
+
+    return (
+      <div className="flex flex-col">
+        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[status]}`}>
+          {labels[status]}
+        </span>
+        {channel.responseTime && status === 'online' && (
+          <span className="text-xs text-gray-500 mt-1">{channel.responseTime}ms</span>
+        )}
+        {channel.lastCheckedAt && (
+          <span className="text-xs text-gray-400 mt-1">
+            {new Date(channel.lastCheckedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   const filteredChannels = channels.filter(channel => {
     const matchesCategory = selectedCategory === 'all' || channel.category === selectedCategory;
     const matchesSearch = channel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          channel.url.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  // 统计在线/离线数量
+  const onlineCount = channels.filter(ch => ch.status === 'online').length;
+  const offlineCount = channels.filter(ch => ch.status === 'offline').length;
 
   if (loading) {
     return <div className="text-center py-12">加载中...</div>;
@@ -261,12 +381,49 @@ export default function DashboardPage() {
             </button>
           )}
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition"
-        >
-          + 添加频道
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={handleStartTest}
+            disabled={testProgress?.status === 'running'}
+            className={`px-4 py-2 rounded-lg transition ${
+              testProgress?.status === 'running'
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-green-600 hover:bg-green-700'
+            } text-white`}
+          >
+            {testProgress?.status === 'running' ? '测试中...' : '测试所有频道'}
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition"
+          >
+            + 添加频道
+          </button>
+        </div>
+      </div>
+
+      {/* 状态统计 */}
+      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900">{channels.length}</div>
+            <div className="text-sm text-gray-500">总频道数</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">{onlineCount}</div>
+            <div className="text-sm text-gray-500">在线</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600">{offlineCount}</div>
+            <div className="text-sm text-gray-500">离线</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-600">
+              {channels.length > 0 ? ((onlineCount / channels.length) * 100).toFixed(1) : 0}%
+            </div>
+            <div className="text-sm text-gray-500">在线率</div>
+          </div>
+        </div>
       </div>
 
       {/* 筛选和搜索 */}
@@ -316,6 +473,9 @@ export default function DashboardPage() {
                   频道名称
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  状态
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   分类
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -329,7 +489,7 @@ export default function DashboardPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredChannels.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                     暂无频道数据
                   </td>
                 </tr>
@@ -346,6 +506,9 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{channel.name}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(channel)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
@@ -383,6 +546,80 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* 测试进度对话框 */}
+      {showTestProgress && testProgress && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-lg w-full mx-4">
+            <h3 className="text-xl font-bold mb-4">频道测试进度</h3>
+
+            <div className="mb-4">
+              <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <span>进度: {testProgress.completed}/{testProgress.total}</span>
+                <span>
+                  {testProgress.status === 'running'
+                    ? '测试中...'
+                    : testProgress.status === 'completed'
+                    ? '已完成'
+                    : testProgress.status === 'cancelled'
+                    ? '已取消'
+                    : '空闲'}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-4">
+                <div
+                  className="bg-indigo-600 h-4 rounded-full transition-all duration-300"
+                  style={{ width: `${(testProgress.completed / testProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {testProgress.current && (
+              <p className="text-sm text-gray-600 mb-4">
+                正在测试: <span className="font-medium">{testProgress.current}</span>
+              </p>
+            )}
+
+            {testProgress.status !== 'running' && (
+              <div className="mb-4">
+                <h4 className="text-sm font-medium mb-2">测试结果:</h4>
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="bg-green-50 p-3 rounded">
+                    <div className="text-2xl font-bold text-green-600">
+                      {testProgress.results.filter(r => r.status === 'online').length}
+                    </div>
+                    <div className="text-sm text-green-700">在线</div>
+                  </div>
+                  <div className="bg-red-50 p-3 rounded">
+                    <div className="text-2xl font-bold text-red-600">
+                      {testProgress.results.filter(r => r.status === 'offline').length}
+                    </div>
+                    <div className="text-sm text-red-700">离线</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              {testProgress.status === 'running' ? (
+                <button
+                  onClick={handleCancelTest}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                >
+                  取消测试
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowTestProgress(false)}
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+                >
+                  关闭
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 添加/编辑模态框 */}
       {(showAddModal || editingChannel) && (
@@ -461,9 +698,9 @@ export default function DashboardPage() {
                     required
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    💡 支持格式：<br />
-                    • 逗号分隔：CCTV-1,http://example.com/cctv1.m3u8<br />
-                    • 空格分隔：CCTV-1 http://example.com/cctv1.m3u8
+                    支持格式：<br />
+                    逗号分隔：CCTV-1,http://example.com/cctv1.m3u8<br />
+                    空格分隔：CCTV-1 http://example.com/cctv1.m3u8
                   </p>
                 </div>
               )}
