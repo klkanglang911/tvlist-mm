@@ -65,7 +65,7 @@ async function updateKeyLastUsed(data: ChannelData, keyId: string): Promise<void
       key.lastUsedAt = new Date().toISOString();
       data.accessKeys = accessKeys;
       // 不更新 lastUpdated，因为这不是用户主动的数据修改
-      await saveChannelData(data, `更新密钥使用时间: ${key.label}`);
+      await saveChannelData(data);
     }
   } catch (error) {
     // 静默失败，不影响主流程
