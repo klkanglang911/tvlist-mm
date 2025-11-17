@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     data.categories.push(newCategory);
     data.lastUpdated = new Date().toISOString();
 
-    await saveChannelData(data, `添加分类: ${name}`);
+    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -128,7 +128,7 @@ export async function PUT(request: NextRequest) {
     });
 
     data.lastUpdated = new Date().toISOString();
-    await saveChannelData(data, `更新分类: ${oldName} -> ${name}`);
+    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -190,7 +190,7 @@ export async function DELETE(request: NextRequest) {
     data.categories.splice(categoryIndex, 1);
     data.lastUpdated = new Date().toISOString();
 
-    await saveChannelData(data, `删除分类: ${deletedCategory.name}`);
+    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,

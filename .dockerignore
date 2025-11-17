@@ -1,0 +1,76 @@
+# 依赖目录
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js 构建输出
+.next
+out
+
+# 生产构建
+/dist
+
+# 环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.docker.example
+
+# 测试文件
+*.test.js
+*.test.ts
+*.test.tsx
+__tests__
+coverage
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 文档和说明
+README.md
+CLAUDE.md
+DEPLOYMENT.md
+DOCKER_DEPLOYMENT.md
+TEST_REPORT.md
+CHANGELOG.md
+
+# 测试脚本
+test-*.sh
+diagnose-*.sh
+*.sh
+
+# Docker 相关
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 临时文件
+*.log
+tmp
+temp
+
+# Vercel 部署相关
+.vercel
+.vercel-deploy-timestamp
+
+# Git 相关
+.git/refs/original
+
+# 其他
+LICENSE
+cookies.txt

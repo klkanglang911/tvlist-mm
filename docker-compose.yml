@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  tvlist-mm:
+    # 镜像名称和标签
+    image: tvlist-mm:latest
+
+    # 容器名称
+    container_name: tvlist-mm
+
+    # 构建配置
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # 端口映射（容器:主机）
+    # 注意：1Panel 中配置反向代理后，无需暴露到外网
+    ports:
+      - "3000:3000"
+
+    # 环境变量（从 .env 文件读取）
+    environment:
+      # 管理员密码
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+
+      # 数据库配置
+      - DATABASE_PATH=${DATABASE_PATH:-/data/tvlist.db}
+
+      # TV.TXT 访问保护
+      - TV_TXT_ACCESS_KEY=${TV_TXT_ACCESS_KEY}
+      - TV_TXT_SECONDARY_KEYS=${TV_TXT_SECONDARY_KEYS}
+      - TV_TXT_RATE_LIMIT=${TV_TXT_RATE_LIMIT:-60}
+
+      # Node.js 配置
+      - NODE_ENV=production
+      - PORT=3000
+
+    # 数据卷挂载（持久化 SQLite 数据库）
+    volumes:
+      - tvlist-data:/data
+
+    # 重启策略：除非手动停止，否则总是自动重启
+    restart: unless-stopped
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/auth/verify', (r) => {process.exit(r.statusCode === 200 || r.statusCode === 401 ? 0 : 1)})"]
+      interval: 30s        # 每30秒检查一次
+      timeout: 10s         # 超时时间10秒
+      retries: 3           # 失败3次后标记为 unhealthy
+      start_period: 60s    # 启动后60秒开始健康检查
+
+    # 日志配置：防止日志文件过大
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"     # 单个日志文件最大 10MB
+        max-file: "3"       # 最多保留 3 个日志文件（总共 30MB）
+
+    # 资源限制（根据 VPS 配置调整）
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'       # 最多使用 1 个 CPU 核心
+          memory: 1G        # 最多使用 1GB 内存
+        reservations:
+          cpus: '0.25'      # 至少保留 0.25 个 CPU 核心
+          memory: 256M      # 至少保留 256MB 内存
+
+    # 网络模式
+    networks:
+      - tvlist-network
+
+# 自定义网络
+networks:
+  tvlist-network:
+    driver: bridge
+
+# 数据卷定义（用于持久化 SQLite 数据库）
+volumes:
+  tvlist-data:
+    driver: local

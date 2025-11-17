@@ -80,10 +80,7 @@ export async function POST(request: NextRequest) {
 
     data.lastUpdated = new Date().toISOString();
 
-    await saveChannelData(
-      data,
-      `导入 ${result.imported} 个频道 (${mode === 'replace' ? '替换' : '追加'})`
-    );
+    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,
