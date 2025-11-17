@@ -19,6 +19,9 @@ export default function DashboardPage() {
   const [testProgress, setTestProgress] = useState<TestProgress | null>(null);
   const [showTestProgress, setShowTestProgress] = useState(false);
 
+  // 离线频道列表对话框
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+
   // 定时任务配置
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -362,6 +365,7 @@ export default function DashboardPage() {
   // 统计在线/离线数量
   const onlineCount = channels.filter(ch => ch.status === 'online').length;
   const offlineCount = channels.filter(ch => ch.status === 'offline').length;
+  const offlineChannels = channels.filter(ch => ch.status === 'offline');
 
   if (loading) {
     return <div className="text-center py-12">加载中...</div>;
@@ -413,9 +417,15 @@ export default function DashboardPage() {
             <div className="text-2xl font-bold text-green-600">{onlineCount}</div>
             <div className="text-sm text-gray-500">在线</div>
           </div>
-          <div className="text-center">
+          <div
+            className="text-center cursor-pointer hover:bg-red-50 rounded-lg transition p-2"
+            onClick={() => offlineCount > 0 && setShowOfflineModal(true)}
+            title={offlineCount > 0 ? "点击查看离线频道列表" : ""}
+          >
             <div className="text-2xl font-bold text-red-600">{offlineCount}</div>
-            <div className="text-sm text-gray-500">离线</div>
+            <div className="text-sm text-gray-500">
+              离线 {offlineCount > 0 && <span className="text-xs text-red-600">▸</span>}
+            </div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-600">
@@ -745,6 +755,100 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 离线频道列表对话框 */}
+      {showOfflineModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">离线频道列表</h3>
+              <button
+                onClick={() => setShowOfflineModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mb-4 text-sm text-gray-600">
+              共 <span className="font-bold text-red-600">{offlineChannels.length}</span> 个频道离线
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {offlineChannels.length === 0 ? (
+                <p className="text-center text-gray-500 py-8">暂无离线频道</p>
+              ) : (
+                <div className="space-y-3">
+                  {offlineChannels.map((channel) => (
+                    <div
+                      key={channel.id}
+                      className="border border-red-200 rounded-lg p-4 hover:bg-red-50 transition"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="font-medium text-gray-900">{channel.name}</h4>
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                              {channel.category}
+                            </span>
+                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                              离线
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-1 break-all">
+                            <span className="font-medium">URL:</span> {channel.url}
+                          </p>
+                          {channel.errorMessage && (
+                            <p className="text-sm text-red-600 mb-1">
+                              <span className="font-medium">错误:</span> {channel.errorMessage}
+                            </p>
+                          )}
+                          {channel.lastCheckedAt && (
+                            <p className="text-xs text-gray-400">
+                              最后检测时间: {new Date(channel.lastCheckedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 ml-4">
+                          <button
+                            onClick={() => {
+                              openEditModal(channel);
+                              setShowOfflineModal(false);
+                            }}
+                            className="px-3 py-1 text-sm text-indigo-600 hover:bg-indigo-50 rounded transition"
+                          >
+                            编辑
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`确定要删除频道"${channel.name}"吗？`)) {
+                                handleDeleteChannel(channel.id);
+                                setShowOfflineModal(false);
+                              }
+                            }}
+                            className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded transition"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowOfflineModal(false)}
+                className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+              >
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { ImportResult } from '@/types';
+import type { ImportResult, Channel, ChannelTestResult } from '@/types';
 
 export default function ImportExportPage() {
   const [importContent, setImportContent] = useState('');
@@ -10,6 +10,14 @@ export default function ImportExportPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
+  // 预览相关状态
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewChannels, setPreviewChannels] = useState<Channel[]>([]);
+  const [testResults, setTestResults] = useState<Map<string, ChannelTestResult>>(new Map());
+  const [testing, setTesting] = useState(false);
+  const [testProgress, setTestProgress] = useState({ current: 0, total: 0 });
+
+  // 开始导入（显示预览）
   const handleImport = async () => {
     if (!importContent.trim()) {
       alert('请输入要导入的内容');
@@ -21,14 +29,99 @@ export default function ImportExportPage() {
     }
 
     setImporting(true);
-    setImportResult(null);
 
     try {
-      const response = await fetch('/api/import', {
+      // 调用预览 API 解析频道
+      const response = await fetch('/api/import/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: importContent,
+          defaultCategory,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        // 显示预览模态框
+        setPreviewChannels(data.data);
+        setTestResults(new Map());
+        setShowPreviewModal(true);
+      } else {
+        alert(data.error || '解析失败');
+      }
+    } catch (error) {
+      alert('网络错误');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // 测试所有预览频道
+  const handleTestChannels = async () => {
+    if (previewChannels.length === 0) return;
+
+    setTesting(true);
+    setTestProgress({ current: 0, total: previewChannels.length });
+    const newResults = new Map<string, ChannelTestResult>();
+
+    for (let i = 0; i < previewChannels.length; i++) {
+      const channel = previewChannels[i];
+      setTestProgress({ current: i + 1, total: previewChannels.length });
+
+      try {
+        // 调用 API 测试频道
+        const response = await fetch('/api/import/test-channel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel }),
+        });
+
+        const data = await response.json();
+        if (data.success && data.data) {
+          newResults.set(channel.id, data.data);
+          setTestResults(new Map(newResults));
+        }
+      } catch (error) {
+        console.error(`测试频道 ${channel.name} 失败:`, error);
+      }
+
+      // 小延迟避免请求过快
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    setTesting(false);
+  };
+
+  // 导入选中的频道
+  const handleImportSelected = async (onlineOnly: boolean) => {
+    let channelsToImport = previewChannels;
+
+    // 如果只导入在线频道
+    if (onlineOnly) {
+      channelsToImport = previewChannels.filter(ch => {
+        const result = testResults.get(ch.id);
+        return result?.status === 'online';
+      });
+
+      if (channelsToImport.length === 0) {
+        alert('没有在线频道可导入');
+        return;
+      }
+    }
+
+    setImporting(true);
+
+    try {
+      // 构建导入内容
+      const importData = channelsToImport.map(ch => `${ch.name},${ch.url}`).join('\n');
+
+      const response = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: importData,
           mode: importMode,
           defaultCategory,
         }),
@@ -38,7 +131,10 @@ export default function ImportExportPage() {
 
       if (data.success) {
         setImportResult(data.data);
+        setShowPreviewModal(false);
         setImportContent('');
+        setPreviewChannels([]);
+        setTestResults(new Map());
         alert(`导入成功！共导入 ${data.data.imported} 个频道`);
       } else {
         alert(data.error || '导入失败');
@@ -219,6 +315,177 @@ URL`}
           </div>
         </div>
       </div>
+
+      {/* 导入预览和测试模态框 */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-6xl w-full mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">导入预览与测试</h3>
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewChannels([]);
+                  setTestResults(new Map());
+                }}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                共解析到 <span className="font-bold text-indigo-600">{previewChannels.length}</span> 个频道
+                {testResults.size > 0 && (
+                  <>
+                    {' | '}
+                    <span className="text-green-600 font-semibold">
+                      {Array.from(testResults.values()).filter(r => r.status === 'online').length} 在线
+                    </span>
+                    {' / '}
+                    <span className="text-red-600 font-semibold">
+                      {Array.from(testResults.values()).filter(r => r.status === 'offline').length} 离线
+                    </span>
+                  </>
+                )}
+              </div>
+
+              <div className="flex gap-3">
+                {!testing && testResults.size === 0 && (
+                  <button
+                    onClick={handleTestChannels}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                  >
+                    开始测试
+                  </button>
+                )}
+
+                {testing && (
+                  <div className="px-4 py-2 bg-yellow-50 text-yellow-800 rounded-lg text-sm">
+                    测试中... {testProgress.current}/{testProgress.total}
+                  </div>
+                )}
+
+                {!testing && testResults.size > 0 && (
+                  <>
+                    <button
+                      onClick={handleTestChannels}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                    >
+                      重新测试
+                    </button>
+                    <button
+                      onClick={() => handleImportSelected(true)}
+                      disabled={importing}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm disabled:opacity-50"
+                    >
+                      {importing ? '导入中...' : '仅导入在线频道'}
+                    </button>
+                    <button
+                      onClick={() => handleImportSelected(false)}
+                      disabled={importing}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm disabled:opacity-50"
+                    >
+                      {importing ? '导入中...' : '导入全部'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* 频道列表 */}
+            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                      #
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      频道名称
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      URL
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                      状态
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {previewChannels.map((channel, index) => {
+                    const testResult = testResults.get(channel.id);
+                    return (
+                      <tr key={channel.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                          {index + 1}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">{channel.name}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm text-gray-500 truncate max-w-md" title={channel.url}>
+                            {channel.url}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {!testResult && !testing && (
+                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                              未测试
+                            </span>
+                          )}
+                          {testing && testProgress.current >= index + 1 && !testResult && (
+                            <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                              测试中...
+                            </span>
+                          )}
+                          {testResult && (
+                            <div className="flex flex-col">
+                              <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                testResult.status === 'online'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {testResult.status === 'online' ? '✓ 在线' : '✗ 离线'}
+                              </span>
+                              {testResult.responseTime && (
+                                <span className="text-xs text-gray-500 mt-1">
+                                  {testResult.responseTime}ms
+                                </span>
+                              )}
+                              {testResult.errorMessage && (
+                                <span className="text-xs text-red-600 mt-1" title={testResult.errorMessage}>
+                                  {testResult.errorMessage.length > 20
+                                    ? testResult.errorMessage.substring(0, 20) + '...'
+                                    : testResult.errorMessage}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewChannels([]);
+                  setTestResults(new Map());
+                }}
+                className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
