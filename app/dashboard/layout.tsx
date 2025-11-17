@@ -84,6 +84,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: '分类管理', path: '/dashboard/categories', icon: '📁' },
     { name: '导入导出', path: '/dashboard/import-export', icon: '📤' },
     { name: '密钥管理', path: '/dashboard/access-keys', icon: '🔑' },
+    { name: '系统设置', path: '/dashboard/settings', icon: '⚙️' },
   ];
 
   return (

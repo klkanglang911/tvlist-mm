@@ -57,7 +57,11 @@ function initializeTables(): void {
       category TEXT NOT NULL,
       "order" INTEGER DEFAULT 0,
       createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      updatedAt TEXT NOT NULL,
+      status TEXT DEFAULT 'unknown',
+      responseTime INTEGER,
+      lastCheckedAt TEXT,
+      errorMessage TEXT
     )
   `);
 
@@ -89,6 +93,29 @@ function initializeTables(): void {
     )
   `);
 
+  // 创建 Webhook 配置表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS webhook_config (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      url TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      createdAt TEXT NOT NULL
+    )
+  `);
+
+  // 创建定时任务配置表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schedule_config (
+      id TEXT PRIMARY KEY,
+      enabled INTEGER DEFAULT 0,
+      scheduleTime TEXT NOT NULL,
+      timezone TEXT DEFAULT 'Asia/Shanghai',
+      lastRunAt TEXT,
+      nextRunAt TEXT
+    )
+  `);
+
   // 创建索引以提高查询性能
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_channels_category ON channels(category);
@@ -102,9 +129,40 @@ function initializeTables(): void {
 
   if (!version) {
     const insertMetadata = db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)');
-    insertMetadata.run('version', '1.2.0');
+    insertMetadata.run('version', '1.3.0');
     insertMetadata.run('lastUpdated', new Date().toISOString());
     console.log('[Database] Metadata initialized');
+  }
+
+  // 数据库迁移：为已存在的 channels 表添加新列
+  try {
+    const tableInfo: any[] = db.pragma('table_info(channels)');
+    const columns = tableInfo.map((col: any) => col.name);
+
+    if (!columns.includes('status')) {
+      db.exec(`
+        ALTER TABLE channels ADD COLUMN status TEXT DEFAULT 'unknown';
+        ALTER TABLE channels ADD COLUMN responseTime INTEGER;
+        ALTER TABLE channels ADD COLUMN lastCheckedAt TEXT;
+        ALTER TABLE channels ADD COLUMN errorMessage TEXT;
+      `);
+      console.log('[Database] Migrated channels table with status fields');
+    }
+  } catch (error) {
+    console.log('[Database] Channels table already up to date or migration not needed');
+  }
+
+  // 初始化默认的定时任务配置
+  const scheduleStmt = db.prepare('SELECT COUNT(*) as count FROM schedule_config');
+  const scheduleCount = scheduleStmt.get() as { count: number };
+
+  if (scheduleCount.count === 0) {
+    const insertSchedule = db.prepare(`
+      INSERT INTO schedule_config (id, enabled, scheduleTime, timezone, nextRunAt)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    insertSchedule.run('default', 0, '13:00', 'Asia/Shanghai', null);
+    console.log('[Database] Default schedule config initialized');
   }
 }
 
