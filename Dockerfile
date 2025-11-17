@@ -40,6 +40,9 @@ WORKDIR /app
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# 安装 su-exec 用于用户切换
+RUN apk add --no-cache su-exec
+
 # 创建非 root 用户
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -49,14 +52,18 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# 复制启动脚本
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # 创建数据目录并设置权限
 RUN mkdir -p /data && chown -R nextjs:nodejs /data
 
 # 设置文件权限
 RUN chown -R nextjs:nodejs /app
 
-# 切换到非 root 用户
-USER nextjs
+# 注意：不切换用户，以 root 启动以便修改 Volume 权限
+# USER nextjs
 
 # 暴露端口
 EXPOSE 3000
@@ -69,5 +76,5 @@ ENV HOSTNAME "0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/auth/verify', (r) => {process.exit(r.statusCode === 200 || r.statusCode === 401 ? 0 : 1)})"
 
-# 启动应用
-CMD ["node", "server.js"]
+# 使用启动脚本
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
