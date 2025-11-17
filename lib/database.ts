@@ -136,7 +136,7 @@ function initializeTables(): void {
 
   // 数据库迁移：为已存在的 channels 表添加新列
   try {
-    const tableInfo: any[] = db.pragma('table_info(channels)');
+    const tableInfo = db.pragma('table_info(channels)') as any[];
     const columns = tableInfo.map((col: any) => col.name);
 
     if (!columns.includes('status')) {
