@@ -49,6 +49,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# 创建数据目录并设置权限
+RUN mkdir -p /data && chown -R nextjs:nodejs /data
+
 # 设置文件权限
 RUN chown -R nextjs:nodejs /app
 
