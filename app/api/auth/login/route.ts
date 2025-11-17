@@ -32,9 +32,11 @@ export async function POST(request: NextRequest) {
     });
 
     // 设置 cookie
+    // 在开发环境或未启用 HTTPS 时，不设置 Secure 标志
+    const isHttps = process.env.ENABLE_HTTPS === 'true';
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
       sameSite: 'strict',
       maxAge: 60 * 60 * 24, // 24 hours
     });

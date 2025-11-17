@@ -23,6 +23,9 @@ services:
       # 管理员密码
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
 
+      # HTTPS 配置
+      - ENABLE_HTTPS=${ENABLE_HTTPS:-false}
+
       # 数据库配置
       - DATABASE_PATH=${DATABASE_PATH:-/data/tvlist.db}
 
