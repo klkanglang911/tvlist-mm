@@ -169,9 +169,8 @@ export function startScheduler(): boolean {
         });
       },
       {
-        scheduled: true,
         timezone: config.timezone,
-      }
+      } as any
     );
 
     // 计算并保存下次运行时间
