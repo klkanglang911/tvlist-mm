@@ -52,7 +52,7 @@ CHANGELOG.md
 # 测试脚本
 test-*.sh
 diagnose-*.sh
-*.sh
+# 注意：docker-entrypoint.sh 需要被包含，所以不排除所有 .sh 文件
 
 # Docker 相关
 Dockerfile
