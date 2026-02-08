@@ -5,11 +5,36 @@
 import { WebhookConfig } from '../types';
 import { getDatabase } from './database';
 
+// Webhook 超时时间（毫秒）
+const WEBHOOK_TIMEOUT = 10000; // 10 秒
+
 // Webhook 发送结果
 interface WebhookResult {
   webhookId: string;
   success: boolean;
   error?: string;
+}
+
+/**
+ * 带超时的 fetch 请求
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeout: number = WEBHOOK_TIMEOUT
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // 获取所有 Webhook 配置
@@ -98,7 +123,7 @@ async function sendWechatWebhook(url: string, message: string): Promise<void> {
     },
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -123,7 +148,7 @@ async function sendDingtalkWebhook(url: string, message: string): Promise<void> 
     },
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -148,7 +173,7 @@ async function sendFeishuWebhook(url: string, message: string): Promise<void> {
     },
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -172,7 +197,7 @@ async function sendCustomWebhook(url: string, message: string): Promise<void> {
     type: 'channel_test_report',
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

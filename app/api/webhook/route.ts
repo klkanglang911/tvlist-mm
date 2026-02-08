@@ -1,29 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '../../../lib/auth';
+import { checkAuth, unauthorizedResponse } from '@/lib/auth';
 import {
   getAllWebhooks,
   addWebhook,
   updateWebhook,
   deleteWebhook,
-} from '../../../lib/webhook';
+} from '@/lib/webhook';
 
 /**
- * 验证请求认证
+ * 验证 Webhook URL 是否安全（防止 SSRF 攻击）
  */
-function checkAuth(request: NextRequest): boolean {
-  const token = request.cookies.get('auth-token')?.value;
-  return token ? verifyToken(token) : false;
+function isValidWebhookUrl(url: string): { valid: boolean; error?: string } {
+  try {
+    const parsed = new URL(url);
+
+    // 只允许 HTTP 和 HTTPS
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { valid: false, error: '只支持 HTTP 和 HTTPS 协议' };
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+
+    // 禁止本地地址
+    const localPatterns = [
+      'localhost',
+      '127.0.0.1',
+      '0.0.0.0',
+      '::1',
+      '[::1]',
+    ];
+    if (localPatterns.includes(hostname)) {
+      return { valid: false, error: '不允许使用本地地址' };
+    }
+
+    // 禁止内网地址
+    const privatePatterns = [
+      /^10\./,                           // 10.0.0.0/8
+      /^172\.(1[6-9]|2[0-9]|3[01])\./,   // 172.16.0.0/12
+      /^192\.168\./,                      // 192.168.0.0/16
+      /^169\.254\./,                      // 链路本地
+      /^fc00:/i,                          // IPv6 ULA
+      /^fe80:/i,                          // IPv6 链路本地
+    ];
+    for (const pattern of privatePatterns) {
+      if (pattern.test(hostname)) {
+        return { valid: false, error: '不允许使用内网地址' };
+      }
+    }
+
+    // 禁止元数据服务地址（云服务商）
+    const metadataPatterns = [
+      '169.254.169.254',  // AWS/GCP/Azure 元数据
+      'metadata.google.internal',
+      'metadata.goog',
+    ];
+    if (metadataPatterns.includes(hostname)) {
+      return { valid: false, error: '不允许访问元数据服务' };
+    }
+
+    return { valid: true };
+  } catch {
+    return { valid: false, error: 'URL 格式无效' };
+  }
 }
 
 // GET - 获取所有 Webhook 配置
 export async function GET(request: NextRequest) {
   try {
-    // 验证登录状态
     if (!checkAuth(request)) {
-      return NextResponse.json(
-        { success: false, error: '未授权访问' },
-        { status: 401 }
-      );
+      return unauthorizedResponse();
     }
 
     const webhooks = getAllWebhooks();
@@ -35,7 +80,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('[Webhook API] Error:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: '服务器错误' },
       { status: 500 }
     );
   }
@@ -44,12 +89,8 @@ export async function GET(request: NextRequest) {
 // POST - 添加 Webhook 配置
 export async function POST(request: NextRequest) {
   try {
-    // 验证登录状态
     if (!checkAuth(request)) {
-      return NextResponse.json(
-        { success: false, error: '未授权访问' },
-        { status: 401 }
-      );
+      return unauthorizedResponse();
     }
 
     const body = await request.json();
@@ -72,12 +113,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证 URL 格式
-    try {
-      new URL(url);
-    } catch {
+    // 验证 URL 格式和安全性
+    const urlValidation = isValidWebhookUrl(url);
+    if (!urlValidation.valid) {
       return NextResponse.json(
-        { success: false, error: 'URL 格式无效' },
+        { success: false, error: urlValidation.error },
         { status: 400 }
       );
     }
@@ -97,7 +137,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Webhook API] Error:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: '服务器错误' },
       { status: 500 }
     );
   }
@@ -106,12 +146,8 @@ export async function POST(request: NextRequest) {
 // PUT - 更新 Webhook 配置
 export async function PUT(request: NextRequest) {
   try {
-    // 验证登录状态
     if (!checkAuth(request)) {
-      return NextResponse.json(
-        { success: false, error: '未授权访问' },
-        { status: 401 }
-      );
+      return unauthorizedResponse();
     }
 
     const body = await request.json();
@@ -136,13 +172,12 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // 验证 URL 格式（如��提供）
+    // 验证 URL 格式和安全性（如果提供）
     if (url) {
-      try {
-        new URL(url);
-      } catch {
+      const urlValidation = isValidWebhookUrl(url);
+      if (!urlValidation.valid) {
         return NextResponse.json(
-          { success: false, error: 'URL 格式无效' },
+          { success: false, error: urlValidation.error },
           { status: 400 }
         );
       }
@@ -165,7 +200,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('[Webhook API] Error:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: '服务器错误' },
       { status: 500 }
     );
   }
@@ -174,12 +209,8 @@ export async function PUT(request: NextRequest) {
 // DELETE - 删除 Webhook 配置
 export async function DELETE(request: NextRequest) {
   try {
-    // 验证登录状态
     if (!checkAuth(request)) {
-      return NextResponse.json(
-        { success: false, error: '未授权访问' },
-        { status: 401 }
-      );
+      return unauthorizedResponse();
     }
 
     const { searchParams } = new URL(request.url);
@@ -208,7 +239,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('[Webhook API] Error:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : '服务器错误' },
+      { success: false, error: '服务器错误' },
       { status: 500 }
     );
   }

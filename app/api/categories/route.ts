@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { checkAuth, unauthorizedResponse } from '@/lib/auth';
 import { getChannelData, saveChannelData } from '@/lib/data';
 import type { ApiResponse } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,12 +28,8 @@ export async function GET(request: NextRequest) {
  * POST - 添加新分类
  */
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get('auth-token')?.value;
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: '未授权',
-    }, { status: 401 });
+  if (!checkAuth(request)) {
+    return unauthorizedResponse();
   }
 
   try {
@@ -87,12 +83,8 @@ export async function POST(request: NextRequest) {
  * PUT - 更新分类
  */
 export async function PUT(request: NextRequest) {
-  const token = request.cookies.get('auth-token')?.value;
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: '未授权',
-    }, { status: 401 });
+  if (!checkAuth(request)) {
+    return unauthorizedResponse();
   }
 
   try {
@@ -148,12 +140,8 @@ export async function PUT(request: NextRequest) {
  * DELETE - 删除分类
  */
 export async function DELETE(request: NextRequest) {
-  const token = request.cookies.get('auth-token')?.value;
-  if (!token || !verifyToken(token)) {
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: '未授权',
-    }, { status: 401 });
+  if (!checkAuth(request)) {
+    return unauthorizedResponse();
   }
 
   try {

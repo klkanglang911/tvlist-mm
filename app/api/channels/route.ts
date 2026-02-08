@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
+import { checkAuth, unauthorizedResponse } from '@/lib/auth';
 import { getChannelData, saveChannelData } from '@/lib/data';
 import type { ApiResponse, Channel } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
-
-/**
- * 验证请求认证
- */
-function checkAuth(request: NextRequest): boolean {
-  const token = request.cookies.get('auth-token')?.value;
-  return token ? verifyToken(token) : false;
-}
 
 /**
  * GET - 获取所有频道
@@ -37,10 +29,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   if (!checkAuth(request)) {
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: '未授权',
-    }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   try {
@@ -91,10 +80,7 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   if (!checkAuth(request)) {
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: '未授权',
-    }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   try {
@@ -151,10 +137,7 @@ export async function PUT(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   if (!checkAuth(request)) {
-    return NextResponse.json<ApiResponse>({
-      success: false,
-      error: '未授权',
-    }, { status: 401 });
+    return unauthorizedResponse();
   }
 
   try {
