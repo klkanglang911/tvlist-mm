@@ -7,6 +7,7 @@ import { ScheduleConfig, Channel } from '../types';
 import { getDatabase } from './database';
 import { testAllChannels, formatTestReport } from './channel-checker';
 import { sendAllWebhooks } from './webhook';
+import { schedulerLogger as log } from './logger';
 
 // 定时任务实例
 let scheduledTask: ScheduledTask | null = null;
@@ -99,7 +100,7 @@ function timeToCron(scheduleTime: string): string {
 
 // 执行定时测试任务
 async function runScheduledTest(): Promise<void> {
-  console.log('[Scheduler] Starting scheduled channel test...');
+  log.info('Starting scheduled channel test...');
 
   const db = getDatabase();
 
@@ -116,24 +117,21 @@ async function runScheduledTest(): Promise<void> {
     const stmt = db.prepare('SELECT * FROM channels ORDER BY "order" ASC');
     const channels = stmt.all() as Channel[];
 
-    console.log(`[Scheduler] Testing ${channels.length} channels...`);
+    log.info(`Testing ${channels.length} channels...`);
 
     // 执行测试
     const progress = await testAllChannels(channels);
 
     // 生成报告
     const report = formatTestReport(progress);
-    console.log('[Scheduler] Test completed:', report);
+    log.info('Test completed');
 
     // 发送 Webhook 通知
     const webhookResults = await sendAllWebhooks(report);
-    console.log(`[Scheduler] Sent ${webhookResults.length} webhook notifications`);
-
-    // 记录成功发送的 Webhook
     const successCount = webhookResults.filter((r) => r.success).length;
-    console.log(`[Scheduler] Webhooks sent: ${successCount}/${webhookResults.length} successful`);
+    log.info(`Webhooks sent: ${successCount}/${webhookResults.length} successful`);
   } catch (error) {
-    console.error('[Scheduler] Error during scheduled test:', error);
+    log.error('Error during scheduled test:', error);
 
     // 发送错误通知
     const errorMessage = `⚠️ 定时测试任务失败\n\n时间: ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n错误: ${error instanceof Error ? error.message : '未知错误'}`;
@@ -146,7 +144,7 @@ export function startScheduler(): boolean {
   const config = getScheduleConfig();
 
   if (!config || !config.enabled) {
-    console.log('[Scheduler] Scheduler is disabled');
+    log.debug('Scheduler is disabled');
     return false;
   }
 
@@ -158,14 +156,14 @@ export function startScheduler(): boolean {
   try {
     // 转换为 cron 表达式
     const cronExpression = timeToCron(config.scheduleTime);
-    console.log(`[Scheduler] Starting scheduler with cron: ${cronExpression} (${config.timezone})`);
+    log.info(`Starting scheduler with cron: ${cronExpression} (${config.timezone})`);
 
     // 创建定时任务（使用指定时区）
     scheduledTask = cron.schedule(
       cronExpression,
       () => {
         runScheduledTest().catch((error) => {
-          console.error('[Scheduler] Unexpected error:', error);
+          log.error('Unexpected error:', error);
         });
       },
       {
@@ -177,10 +175,10 @@ export function startScheduler(): boolean {
     const nextRunAt = calculateNextRunTime(config.scheduleTime, config.timezone);
     updateScheduleConfig({ nextRunAt });
 
-    console.log(`[Scheduler] Scheduler started. Next run at: ${nextRunAt}`);
+    log.info(`Scheduler started. Next run at: ${nextRunAt}`);
     return true;
   } catch (error) {
-    console.error('[Scheduler] Failed to start scheduler:', error);
+    log.error('Failed to start scheduler:', error);
     return false;
   }
 }
@@ -190,7 +188,7 @@ export function stopScheduler(): void {
   if (scheduledTask) {
     scheduledTask.stop();
     scheduledTask = null;
-    console.log('[Scheduler] Scheduler stopped');
+    log.debug('Scheduler stopped');
   }
 }
 
@@ -207,7 +205,7 @@ export function isSchedulerRunning(): boolean {
 
 // 手动触发一次测试（不影响定时任务）
 export async function triggerManualTest(): Promise<void> {
-  console.log('[Scheduler] Manual test triggered');
+  log.info('Manual test triggered');
   await runScheduledTest();
 }
 
@@ -216,9 +214,9 @@ export function initializeScheduler(): void {
   const config = getScheduleConfig();
 
   if (config && config.enabled) {
-    console.log('[Scheduler] Initializing scheduler on startup...');
+    log.info('Initializing scheduler on startup...');
     startScheduler();
   } else {
-    console.log('[Scheduler] Scheduler is disabled, skipping initialization');
+    log.debug('Scheduler is disabled, skipping initialization');
   }
 }

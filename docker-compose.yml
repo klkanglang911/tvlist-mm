@@ -14,7 +14,6 @@ services:
       dockerfile: Dockerfile
 
     # 端口映射（容器:主机）
-    # 注意：1Panel 中配置反向代理后，无需暴露到外网
     ports:
       - "3000:3000"
 
@@ -38,6 +37,10 @@ services:
       - NODE_ENV=production
       - PORT=3000
 
+      # 日志级别：debug | info | warn | error | none
+      # 生产环境建议使用 warn 或 error 以减少日志量
+      - LOG_LEVEL=${LOG_LEVEL:-warn}
+
     # 数据卷挂载（持久化 SQLite 数据库）
     volumes:
       - tvlist-data:/data
@@ -48,27 +51,18 @@ services:
     # 健康检查
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/auth/verify', (r) => {process.exit(r.statusCode === 200 || r.statusCode === 401 ? 0 : 1)})"]
-      interval: 30s        # 每30秒检查一次
-      timeout: 10s         # 超时时间10秒
-      retries: 3           # 失败3次后标记为 unhealthy
-      start_period: 60s    # 启动后60秒开始健康检查
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
-    # 日志配置：防止日志文件过大
+    # 日志配置：限制日志文件大小，防止磁盘占满
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"     # 单个日志文件最大 10MB
-        max-file: "3"       # 最多保留 3 个日志文件（总共 30MB）
-
-    # 资源限制（根据 VPS 配置调整）
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'       # 最多使用 1 个 CPU 核心
-          memory: 1G        # 最多使用 1GB 内存
-        reservations:
-          cpus: '0.25'      # 至少保留 0.25 个 CPU 核心
-          memory: 256M      # 至少保留 256MB 内存
+        max-size: "5m"      # 单个日志文件最大 5MB
+        max-file: "3"       # 最多保留 3 个日志文件（总共最大 15MB）
+        compress: "true"    # 压缩旧日志文件
 
     # 网络模式
     networks:
