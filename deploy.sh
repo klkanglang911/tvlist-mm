@@ -23,6 +23,7 @@ PROJECT_NAME="tvlist-mm"
 CONTAINER_NAME="tvlist-mm"
 BACKUP_DIR="./backups"
 MAX_BACKUPS=5
+DEFAULT_PORT=5867
 
 # 解析参数
 NO_BACKUP=false
@@ -209,6 +210,10 @@ cleanup() {
 verify_deployment() {
     print_info "验证部署..."
 
+    # 读取端口配置
+    source .env 2>/dev/null || true
+    PORT=${HOST_PORT:-$DEFAULT_PORT}
+
     # 等待容器启动
     sleep 5
 
@@ -223,7 +228,7 @@ verify_deployment() {
             sleep 10
 
             # 健康检查
-            if curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/auth/verify | grep -q "200\|401"; then
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT}/api/auth/verify | grep -q "200\|401"; then
                 print_success "应用健康检查通过"
             else
                 print_warning "应用健康检查未通过，请检查日志"
@@ -241,12 +246,16 @@ verify_deployment() {
 
 # 显示部署信息
 show_info() {
+    # 读取端口配置
+    source .env 2>/dev/null || true
+    PORT=${HOST_PORT:-$DEFAULT_PORT}
+
     echo ""
     echo "=========================================="
     print_success "部署完成！"
     echo "=========================================="
     echo ""
-    echo "访问地址: http://$(hostname -I | awk '{print $1}'):3000"
+    echo "访问地址: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'YOUR_IP'):${PORT}"
     echo ""
     echo "常用命令:"
     echo "  查看日志:     docker logs -f ${CONTAINER_NAME}"

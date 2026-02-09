@@ -1,4 +1,5 @@
-version: '3.8'
+# tvlist-mm Docker Compose 配置
+# 注意: 新版 Docker Compose 不再需要 version 字段
 
 services:
   tvlist-mm:
@@ -13,9 +14,9 @@ services:
       context: .
       dockerfile: Dockerfile
 
-    # 端口映射（容器:主机）
+    # 端口映射（主机:容器）
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-5867}:3000"
 
     # 环境变量（从 .env 文件读取）
     environment:
