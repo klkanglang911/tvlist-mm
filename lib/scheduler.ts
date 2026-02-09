@@ -9,6 +9,25 @@ import { testAllChannels, formatTestReport } from './channel-checker';
 import { sendAllWebhooks } from './webhook';
 import { schedulerLogger as log } from './logger';
 
+// Cron 调度选项类型
+interface CronScheduleOptions {
+  scheduled?: boolean;
+  timezone?: string;
+  recoverMissedExecutions?: boolean;
+  name?: string;
+  runOnInit?: boolean;
+}
+
+// 数据库行类型
+interface ScheduleConfigRow {
+  id: string;
+  enabled: number;
+  scheduleTime: string;
+  timezone: string;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+}
+
 // 定时任务实例
 let scheduledTask: ScheduledTask | null = null;
 
@@ -16,7 +35,7 @@ let scheduledTask: ScheduledTask | null = null;
 export function getScheduleConfig(): ScheduleConfig | null {
   const db = getDatabase();
   const stmt = db.prepare('SELECT * FROM schedule_config WHERE id = ?');
-  const row = stmt.get('default') as any;
+  const row = stmt.get('default') as ScheduleConfigRow | undefined;
 
   if (!row) return null;
 
@@ -25,8 +44,8 @@ export function getScheduleConfig(): ScheduleConfig | null {
     enabled: Boolean(row.enabled),
     scheduleTime: row.scheduleTime,
     timezone: row.timezone,
-    lastRunAt: row.lastRunAt,
-    nextRunAt: row.nextRunAt,
+    lastRunAt: row.lastRunAt || undefined,
+    nextRunAt: row.nextRunAt || undefined,
   };
 }
 
@@ -37,7 +56,7 @@ export function updateScheduleConfig(
   const db = getDatabase();
 
   const updates: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | null)[] = [];
 
   if (config.enabled !== undefined) {
     updates.push('enabled = ?');
@@ -159,6 +178,10 @@ export function startScheduler(): boolean {
     log.info(`Starting scheduler with cron: ${cronExpression} (${config.timezone})`);
 
     // 创建定时任务（使用指定时区）
+    const scheduleOptions: CronScheduleOptions = {
+      timezone: config.timezone,
+    };
+
     scheduledTask = cron.schedule(
       cronExpression,
       () => {
@@ -166,9 +189,7 @@ export function startScheduler(): boolean {
           log.error('Unexpected error:', error);
         });
       },
-      {
-        timezone: config.timezone,
-      } as any
+      scheduleOptions
     );
 
     // 计算并保存下次运行时间

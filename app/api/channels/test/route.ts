@@ -18,7 +18,7 @@ function checkAuth(request: NextRequest): boolean {
   return token ? verifyToken(token) : false;
 }
 
-// POST - 开始测试所有频道
+// POST - 开始测试频道（支持按分类测试）
 export async function POST(request: NextRequest) {
   try {
     // 验证登录状态
@@ -38,14 +38,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 获取所有频道
+    // 解析请求体获取分类参数
+    let category: string | null = null;
+    try {
+      const body = await request.json();
+      category = body.category || null;
+    } catch {
+      // 没有请求体或解析失败，测试所有频道
+    }
+
+    // 获取频道（按分类筛选或全部）
     const db = getDatabase();
-    const stmt = db.prepare('SELECT * FROM channels ORDER BY "order" ASC');
-    const channels = stmt.all() as Channel[];
+    let channels: Channel[];
+
+    if (category) {
+      const stmt = db.prepare('SELECT * FROM channels WHERE category = ? ORDER BY "order" ASC');
+      channels = stmt.all(category) as Channel[];
+    } else {
+      const stmt = db.prepare('SELECT * FROM channels ORDER BY "order" ASC');
+      channels = stmt.all() as Channel[];
+    }
 
     if (channels.length === 0) {
       return NextResponse.json(
-        { success: false, error: '没有频道可供测试' },
+        { success: false, error: category ? `分类"${category}"下没有频道` : '没有频道可供测试' },
         { status: 400 }
       );
     }
@@ -65,8 +81,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '测试已开始',
+      message: category ? `开始测试"${category}"分类` : '测试已开始',
       total: channels.length,
+      category: category || null,
     });
   } catch (error) {
     console.error('[Test API] Error:', error);

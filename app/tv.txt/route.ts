@@ -6,6 +6,44 @@ import type { ChannelData } from '@/types';
 // 简单的内存速率限制器
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
+// 内存保护配置
+const RATE_LIMIT_MAX_ENTRIES = 10000; // 最多存储 10000 个条目
+const RATE_LIMIT_CLEANUP_INTERVAL = 5 * 60 * 1000; // 每 5 分钟清理一次
+
+/**
+ * 清理过期的速率限制条目
+ */
+function cleanupExpiredRateLimitEntries(): void {
+  const now = Date.now();
+  let cleanedCount = 0;
+
+  for (const [key, record] of rateLimitMap.entries()) {
+    if (now > record.resetAt) {
+      rateLimitMap.delete(key);
+      cleanedCount++;
+    }
+  }
+
+  if (cleanedCount > 0) {
+    console.log(`[tv.txt] Cleaned up ${cleanedCount} expired rate limit entries`);
+  }
+}
+
+// 启动定期清理任务
+let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+
+function startRateLimitCleanup(): void {
+  if (cleanupInterval) return;
+  cleanupInterval = setInterval(cleanupExpiredRateLimitEntries, RATE_LIMIT_CLEANUP_INTERVAL);
+  // 不阻止进程退出
+  if (cleanupInterval.unref) {
+    cleanupInterval.unref();
+  }
+}
+
+// 自动启动清理任务
+startRateLimitCleanup();
+
 /**
  * 验证访问密钥（混合模式：数据库优先，环境变量兜底）
  * @returns { isValid: boolean, keyId?: string } - 验证结果和密钥ID（如果是数据库密钥）
@@ -80,6 +118,18 @@ function checkRateLimit(ip: string): boolean {
   const limit = parseInt(process.env.TV_TXT_RATE_LIMIT || '60', 10);
   const now = Date.now();
   const hourInMs = 60 * 60 * 1000;
+
+  // 内存保护：如果条目过多，先清理
+  if (rateLimitMap.size >= RATE_LIMIT_MAX_ENTRIES) {
+    cleanupExpiredRateLimitEntries();
+    // 如果清理后仍然过多，删除最旧的条目
+    if (rateLimitMap.size >= RATE_LIMIT_MAX_ENTRIES) {
+      const oldestKey = rateLimitMap.keys().next().value;
+      if (oldestKey) {
+        rateLimitMap.delete(oldestKey);
+      }
+    }
+  }
 
   const record = rateLimitMap.get(ip);
 

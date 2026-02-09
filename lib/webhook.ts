@@ -15,6 +15,15 @@ interface WebhookResult {
   error?: string;
 }
 
+// 数据库行类型
+interface WebhookRow {
+  id: string;
+  type: string;
+  url: string;
+  enabled: number;
+  createdAt: string;
+}
+
 /**
  * 带超时的 fetch 请求
  */
@@ -41,11 +50,11 @@ async function fetchWithTimeout(
 export function getAllWebhooks(): WebhookConfig[] {
   const db = getDatabase();
   const stmt = db.prepare('SELECT * FROM webhook_config ORDER BY createdAt DESC');
-  const rows = stmt.all() as any[];
+  const rows = stmt.all() as WebhookRow[];
 
   return rows.map((row) => ({
     id: row.id,
-    type: row.type,
+    type: row.type as WebhookConfig['type'],
     url: row.url,
     enabled: Boolean(row.enabled),
     createdAt: row.createdAt,
@@ -82,7 +91,7 @@ export function updateWebhook(
   const db = getDatabase();
 
   const updates: string[] = [];
-  const values: any[] = [];
+  const values: (string | number)[] = [];
 
   if (config.type !== undefined) {
     updates.push('type = ?');
@@ -244,7 +253,7 @@ export async function sendWebhook(
   }
 }
 
-// 发送所有启用的 Webhook 通知
+// 发送所有启用的 Webhook 通知（并发发送）
 export async function sendAllWebhooks(message: string): Promise<WebhookResult[]> {
   const webhooks = getAllWebhooks().filter((w) => w.enabled);
 
@@ -252,14 +261,9 @@ export async function sendAllWebhooks(message: string): Promise<WebhookResult[]>
     return [];
   }
 
-  const results: WebhookResult[] = [];
-
-  for (const webhook of webhooks) {
-    const result = await sendWebhook(webhook, message);
-    results.push(result);
-    // 小延迟避免请求过快
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
+  // 并发发送所有 Webhook
+  const promises = webhooks.map((webhook) => sendWebhook(webhook, message));
+  const results = await Promise.all(promises);
 
   return results;
 }

@@ -49,7 +49,7 @@ export default function LoginPage() {
             <p className="text-gray-600">请输入管理员密码</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" autoComplete="off">
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 密码
@@ -63,6 +63,7 @@ export default function LoginPage() {
                 placeholder="请输入密码"
                 required
                 disabled={loading}
+                autoComplete="new-password"
               />
             </div>
 

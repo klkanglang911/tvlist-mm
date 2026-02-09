@@ -72,9 +72,54 @@ interface RateLimitEntry {
 // 内存存储速率限制状态（生产环境建议使用 Redis）
 const rateLimitMap = new Map<string, RateLimitEntry>();
 
+// 内存保护配置
+const RATE_LIMIT_MAX_ENTRIES = 10000; // 最多存储 10000 个条目
+const RATE_LIMIT_CLEANUP_INTERVAL = 5 * 60 * 1000; // 每 5 分钟清理一次
+
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 分钟窗口
 const MAX_ATTEMPTS = 5; // 最多 5 次尝试
 const BLOCK_DURATION = 30 * 60 * 1000; // 封锁 30 分钟
+
+/**
+ * 清理过期的速率限制条目
+ */
+function cleanupExpiredRateLimitEntries(): void {
+  const now = Date.now();
+  let cleanedCount = 0;
+
+  for (const [key, entry] of rateLimitMap.entries()) {
+    // 清理已解封的条目
+    if (entry.blockedUntil && now >= entry.blockedUntil) {
+      rateLimitMap.delete(key);
+      cleanedCount++;
+      continue;
+    }
+    // 清理窗口已过期的条目
+    if (!entry.blockedUntil && now - entry.firstAttempt >= RATE_LIMIT_WINDOW) {
+      rateLimitMap.delete(key);
+      cleanedCount++;
+    }
+  }
+
+  if (cleanedCount > 0) {
+    console.log(`[Auth] Cleaned up ${cleanedCount} expired rate limit entries`);
+  }
+}
+
+// 启动定期清理任务
+let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+
+function startRateLimitCleanup(): void {
+  if (cleanupInterval) return;
+  cleanupInterval = setInterval(cleanupExpiredRateLimitEntries, RATE_LIMIT_CLEANUP_INTERVAL);
+  // 不阻止进程退出
+  if (cleanupInterval.unref) {
+    cleanupInterval.unref();
+  }
+}
+
+// 自动启动清理任务
+startRateLimitCleanup();
 
 /**
  * 检查是否被速率限制
@@ -123,6 +168,19 @@ export function checkRateLimit(identifier: string): { allowed: boolean; retryAft
  */
 export function recordLoginAttempt(identifier: string): void {
   const now = Date.now();
+
+  // 内存保护：如果条目过多，先清理
+  if (rateLimitMap.size >= RATE_LIMIT_MAX_ENTRIES) {
+    cleanupExpiredRateLimitEntries();
+    // 如果清理后仍然过多，删除最旧的条目
+    if (rateLimitMap.size >= RATE_LIMIT_MAX_ENTRIES) {
+      const oldestKey = rateLimitMap.keys().next().value;
+      if (oldestKey) {
+        rateLimitMap.delete(oldestKey);
+      }
+    }
+  }
+
   const entry = rateLimitMap.get(identifier);
 
   if (entry) {

@@ -33,6 +33,11 @@ function isValidWebhookUrl(url: string): { valid: boolean; error?: string } {
       return { valid: false, error: '不允许使用本地地址' };
     }
 
+    // 禁止 .local 域名（本地网络服务发现）
+    if (hostname.endsWith('.local') || hostname.endsWith('.localhost')) {
+      return { valid: false, error: '不允许使用本地域名' };
+    }
+
     // 禁止内网地址
     const privatePatterns = [
       /^10\./,                           // 10.0.0.0/8
@@ -41,6 +46,11 @@ function isValidWebhookUrl(url: string): { valid: boolean; error?: string } {
       /^169\.254\./,                      // 链路本地
       /^fc00:/i,                          // IPv6 ULA
       /^fe80:/i,                          // IPv6 链路本地
+      /^::ffff:10\./i,                    // IPv4-mapped IPv6 (10.x.x.x)
+      /^::ffff:172\.(1[6-9]|2[0-9]|3[01])\./i, // IPv4-mapped IPv6 (172.16-31.x.x)
+      /^::ffff:192\.168\./i,              // IPv4-mapped IPv6 (192.168.x.x)
+      /^::ffff:127\./i,                   // IPv4-mapped IPv6 (127.x.x.x)
+      /^::ffff:169\.254\./i,              // IPv4-mapped IPv6 link-local
     ];
     for (const pattern of privatePatterns) {
       if (pattern.test(hostname)) {
@@ -53,6 +63,7 @@ function isValidWebhookUrl(url: string): { valid: boolean; error?: string } {
       '169.254.169.254',  // AWS/GCP/Azure 元数据
       'metadata.google.internal',
       'metadata.goog',
+      '::ffff:169.254.169.254', // IPv4-mapped IPv6 元数据
     ];
     if (metadataPatterns.includes(hostname)) {
       return { valid: false, error: '不允许访问元数据服务' };

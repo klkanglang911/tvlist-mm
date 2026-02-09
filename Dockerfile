@@ -10,7 +10,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # 安装依赖
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # ========================================
 # 阶段 2: 构建应用
@@ -52,9 +52,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# 复制启动脚本
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# 复制启动脚本（使用 echo 避免 Windows CRLF 问题）
+RUN printf '#!/bin/sh\nset -e\nif [ -d "/data" ]; then\n  echo "[Docker] Setting /data directory permissions..."\n  chown -R nextjs:nodejs /data\nfi\necho "[Docker] Starting application as nextjs user..."\nexec su-exec nextjs node server.js\n' > /usr/local/bin/docker-entrypoint.sh \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # 创建数据目录并设置权限
 RUN mkdir -p /data && chown -R nextjs:nodejs /data
@@ -71,6 +71,7 @@ EXPOSE 3000
 # 设置环境变量
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
+ENV DATABASE_PATH "/data/tvlist.db"
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

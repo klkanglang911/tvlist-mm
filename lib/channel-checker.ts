@@ -14,15 +14,22 @@ const CONFIG = {
   READ_TIMEOUT: 15000,     // 读取超时 15 秒
   MAX_BYTES: 65536,        // 最大读取 64KB
   MAX_REDIRECTS: 5,        // 最大重定向次数
+  CONCURRENCY_LIMIT: 20,   // 并发测试数量
 };
 
 // 全局测试状态（用于跟踪当前测试进度）
 let currentTestProgress: TestProgress | null = null;
 let testAbortController: AbortController | null = null;
+let isTestRunning = false; // 测试锁，防止并发测试
 
 // 获取当前测试进度
 export function getTestProgress(): TestProgress | null {
   return currentTestProgress;
+}
+
+// 检查是否有测试正在运行
+export function isTestInProgress(): boolean {
+  return isTestRunning;
 }
 
 // 取消当前测试
@@ -31,6 +38,7 @@ export function cancelTest(): boolean {
     testAbortController.abort();
     currentTestProgress.status = 'cancelled';
     currentTestProgress.finishedAt = new Date().toISOString();
+    isTestRunning = false;
     return true;
   }
   return false;
@@ -173,11 +181,19 @@ async function testUrl(
   });
 }
 
-// 批量测试所有频道（顺序执行）
+// 批量测试所有频道（并发执行）
 export async function testAllChannels(
   channels: Channel[],
   onProgress?: (progress: TestProgress) => void
 ): Promise<TestProgress> {
+  // 检查是否有测试正在运行
+  if (isTestRunning) {
+    throw new Error('已有测试任务正在运行');
+  }
+
+  // 设置测试锁
+  isTestRunning = true;
+
   // 初始化测试状态
   testAbortController = new AbortController();
   currentTestProgress = {
@@ -195,63 +211,106 @@ export async function testAllChannels(
     WHERE id = ?
   `);
 
-  // 顺序测试每个频道
-  for (let i = 0; i < channels.length; i++) {
-    // 检查是否被取消
-    if (testAbortController.signal.aborted) {
-      break;
+  try {
+    // 使用并发限制的批量测试
+    const results: ChannelTestResult[] = [];
+    const concurrencyLimit = CONFIG.CONCURRENCY_LIMIT;
+
+    // 将频道分成批次
+    for (let i = 0; i < channels.length; i += concurrencyLimit) {
+      // 检查是否被取消
+      if (testAbortController.signal.aborted) {
+        break;
+      }
+
+      const batch = channels.slice(i, i + concurrencyLimit);
+
+      // 更新当前测试的频道名称（显示批次信息）
+      currentTestProgress.current = `测试中 (${i + 1}-${Math.min(i + batch.length, channels.length)}/${channels.length})`;
+
+      // 通知进度
+      if (onProgress) {
+        onProgress({ ...currentTestProgress });
+      }
+
+      // 并发测试这一批频道
+      const batchPromises = batch.map(async (channel) => {
+        // 检查是否被取消
+        if (testAbortController?.signal.aborted) {
+          return {
+            channelId: channel.id,
+            channelName: channel.name,
+            status: 'offline' as const,
+            errorMessage: '测试已取消',
+            testedAt: new Date().toISOString(),
+          };
+        }
+
+        return testChannel(channel);
+      });
+
+      // 等待这批测试完成
+      const batchResults = await Promise.allSettled(batchPromises);
+
+      // 处理结果
+      for (let j = 0; j < batchResults.length; j++) {
+        const settledResult = batchResults[j];
+        let result: ChannelTestResult;
+
+        if (settledResult.status === 'fulfilled') {
+          result = settledResult.value;
+        } else {
+          // Promise 被拒绝的情况
+          result = {
+            channelId: batch[j].id,
+            channelName: batch[j].name,
+            status: 'offline',
+            errorMessage: settledResult.reason?.message || '测试失败',
+            testedAt: new Date().toISOString(),
+          };
+        }
+
+        results.push(result);
+        currentTestProgress.results.push(result);
+        currentTestProgress.completed = results.length;
+
+        // 更新数据库
+        updateStmt.run(
+          result.status,
+          result.responseTime || null,
+          result.testedAt,
+          result.errorMessage || null,
+          result.channelId
+        );
+      }
+
+      // 通知进度
+      if (onProgress) {
+        onProgress({ ...currentTestProgress });
+      }
     }
 
-    const channel = channels[i];
-    currentTestProgress.current = channel.name;
+    // 完成测试
+    currentTestProgress.current = undefined;
+    currentTestProgress.finishedAt = new Date().toISOString();
 
-    // 通知进度
+    if (!testAbortController.signal.aborted) {
+      currentTestProgress.status = 'completed';
+    }
+
+    // 最终通知
     if (onProgress) {
       onProgress({ ...currentTestProgress });
     }
 
-    // 测试频道
-    const result = await testChannel(channel);
-    currentTestProgress.results.push(result);
-    currentTestProgress.completed = i + 1;
+    const finalProgress = { ...currentTestProgress };
 
-    // 更新数据库
-    updateStmt.run(
-      result.status,
-      result.responseTime || null,
-      result.testedAt,
-      result.errorMessage || null,
-      result.channelId
-    );
-
-    // 通知��度
-    if (onProgress) {
-      onProgress({ ...currentTestProgress });
-    }
-
-    // 小延迟，避免请求过快
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    return finalProgress;
+  } finally {
+    // 清理
+    testAbortController = null;
+    isTestRunning = false;
   }
-
-  // 完成测试
-  currentTestProgress.current = undefined;
-  currentTestProgress.finishedAt = new Date().toISOString();
-
-  if (!testAbortController.signal.aborted) {
-    currentTestProgress.status = 'completed';
-  }
-
-  // 最终通知
-  if (onProgress) {
-    onProgress({ ...currentTestProgress });
-  }
-
-  const finalProgress = { ...currentTestProgress };
-
-  // 清理
-  testAbortController = null;
-
-  return finalProgress;
 }
 
 // 获取测试摘要

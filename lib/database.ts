@@ -6,6 +6,26 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
+// 表列信息类型
+interface TableColumn {
+  cid: number;
+  name: string;
+  type: string;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
+}
+
+// 元数据行类型
+interface MetadataRow {
+  value: string;
+}
+
+// 计数行类型
+interface CountRow {
+  count: number;
+}
+
 // 数据库文件路径
 const getDatabasePath = (): string => {
   // Docker 环境使用 volume 路径
@@ -125,7 +145,7 @@ function initializeTables(): void {
 
   // 初始化元数据
   const versionStmt = db.prepare('SELECT value FROM metadata WHERE key = ?');
-  const version = versionStmt.get('version');
+  const version = versionStmt.get('version') as MetadataRow | undefined;
 
   if (!version) {
     const insertMetadata = db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)');
@@ -136,8 +156,8 @@ function initializeTables(): void {
 
   // 数据库迁移：为已存在的 channels 表添加新列
   try {
-    const tableInfo = db.pragma('table_info(channels)') as any[];
-    const columns = tableInfo.map((col: any) => col.name);
+    const tableInfo = db.pragma('table_info(channels)') as TableColumn[];
+    const columns = tableInfo.map((col) => col.name);
 
     if (!columns.includes('status')) {
       db.exec(`
@@ -154,7 +174,7 @@ function initializeTables(): void {
 
   // 初始化默认的定时任务配置
   const scheduleStmt = db.prepare('SELECT COUNT(*) as count FROM schedule_config');
-  const scheduleCount = scheduleStmt.get() as { count: number };
+  const scheduleCount = scheduleStmt.get() as CountRow;
 
   if (scheduleCount.count === 0) {
     const insertSchedule = db.prepare(`

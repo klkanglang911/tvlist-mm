@@ -1,6 +1,6 @@
 {
   "name": "tvlist-mm",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@types/node-cron": "^3.0.11",
     "better-sqlite3": "^9.6.0",
     "date-fns": "^4.1.0",

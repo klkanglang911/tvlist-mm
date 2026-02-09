@@ -67,7 +67,6 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json<ApiResponse>({
       success: true,
-      data: { token },
       message: '登录成功',
     });
 

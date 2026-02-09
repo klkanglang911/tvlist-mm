@@ -1,7 +1,119 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Channel, Category, TestProgress, ScheduleConfig, WebhookConfig } from '@/types';
+
+// 可排序的频道行组件
+interface SortableChannelRowProps {
+  channel: Channel;
+  isSelected: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  getStatusBadge: (channel: Channel) => React.ReactNode;
+  isDraggable: boolean;
+}
+
+function SortableChannelRow({
+  channel,
+  isSelected,
+  onToggle,
+  onEdit,
+  onDelete,
+  getStatusBadge,
+  isDraggable,
+}: SortableChannelRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: channel.id, disabled: !isDraggable });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={`hover:bg-gray-50 ${isDragging ? 'bg-indigo-50' : ''}`}
+    >
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="flex items-center gap-2">
+          {isDraggable && (
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 p-1"
+              title="拖拽排序"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+              </svg>
+            </button>
+          )}
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggle}
+            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          />
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <div className="text-sm font-medium text-gray-900">{channel.name}</div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        {getStatusBadge(channel)}
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+          {channel.category}
+        </span>
+      </td>
+      <td className="px-6 py-4">
+        <div className="text-sm text-gray-500 truncate max-w-md">{channel.url}</div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+        <button
+          onClick={onEdit}
+          className="text-indigo-600 hover:text-indigo-900 mr-4"
+        >
+          编辑
+        </button>
+        <button
+          onClick={onDelete}
+          className="text-red-600 hover:text-red-900"
+        >
+          删除
+        </button>
+      </td>
+    </tr>
+  );
+}
 
 export default function DashboardPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -87,15 +199,21 @@ export default function DashboardPage() {
     }
   };
 
-  const handleStartTest = async () => {
-    if (channels.length === 0) {
-      alert('没有频道可供测试');
+  const handleStartTest = async (category?: string) => {
+    const targetChannels = category
+      ? channels.filter(ch => ch.category === category)
+      : channels;
+
+    if (targetChannels.length === 0) {
+      alert(category ? `分类"${category}"下没有频道` : '没有频道可供测试');
       return;
     }
 
     try {
       const response = await fetch('/api/channels/test', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: category || null }),
       });
 
       const data = await response.json();
@@ -367,6 +485,62 @@ export default function DashboardPage() {
   const offlineCount = channels.filter(ch => ch.status === 'offline').length;
   const offlineChannels = channels.filter(ch => ch.status === 'offline');
 
+  // 拖拽排序相关
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // 是否可以拖拽排序（只有选择具体分类且没有搜索词时才能排序）
+  const canDragSort = selectedCategory !== 'all' && searchTerm === '';
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = filteredChannels.findIndex(ch => ch.id === active.id);
+    const newIndex = filteredChannels.findIndex(ch => ch.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // 更新本地状态
+    const newFilteredChannels = arrayMove(filteredChannels, oldIndex, newIndex);
+
+    // 更新完整频道列表（只更新当前分类的频道顺序）
+    const otherChannels = channels.filter(ch => ch.category !== selectedCategory);
+    setChannels([...otherChannels, ...newFilteredChannels]);
+
+    // 调用 API 保存排序
+    try {
+      const channelIds = newFilteredChannels.map(ch => ch.id);
+      const response = await fetch('/api/channels/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          categoryId: selectedCategory,
+          channelIds,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        alert(data.error || '保存排序失败');
+        // 恢复数据
+        await fetchData();
+      }
+    } catch (error) {
+      alert('网络错误');
+      await fetchData();
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-12">加载中...</div>;
   }
@@ -387,7 +561,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex gap-3">
           <button
-            onClick={handleStartTest}
+            onClick={() => handleStartTest()}
             disabled={testProgress?.status === 'running'}
             className={`px-4 py-2 rounded-lg transition ${
               testProgress?.status === 'running'
@@ -397,6 +571,19 @@ export default function DashboardPage() {
           >
             {testProgress?.status === 'running' ? '测试中...' : '测试所有频道'}
           </button>
+          {selectedCategory !== 'all' && (
+            <button
+              onClick={() => handleStartTest(selectedCategory)}
+              disabled={testProgress?.status === 'running'}
+              className={`px-4 py-2 rounded-lg transition ${
+                testProgress?.status === 'running'
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              } text-white`}
+            >
+              测试当前分类
+            </button>
+          )}
           <button
             onClick={() => setShowAddModal(true)}
             className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition"
@@ -467,86 +654,80 @@ export default function DashboardPage() {
 
       {/* 频道列表 */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        {canDragSort && (
+          <div className="bg-indigo-50 px-6 py-2 border-b border-indigo-100 flex items-center gap-2">
+            <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+            </svg>
+            <span className="text-sm text-indigo-700">拖拽排序已启用 - 拖动行可调整频道顺序</span>
+          </div>
+        )}
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={filteredChannels.length > 0 && selectedChannels.size === filteredChannels.length}
-                    onChange={handleToggleAll}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  频道名称
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  状态
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  分类
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  URL
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredChannels.length === 0 ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                    暂无频道数据
-                  </td>
-                </tr>
-              ) : (
-                filteredChannels.map((channel) => (
-                  <tr key={channel.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <th className="px-6 py-3 text-left">
+                    <div className="flex items-center gap-2">
+                      {canDragSort && <span className="w-4"></span>}
                       <input
                         type="checkbox"
-                        checked={selectedChannels.has(channel.id)}
-                        onChange={() => handleToggleChannel(channel.id)}
+                        checked={filteredChannels.length > 0 && selectedChannels.size === filteredChannels.length}
+                        onChange={handleToggleAll}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{channel.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(channel)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {channel.category}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-500 truncate max-w-md">{channel.url}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => openEditModal(channel)}
-                        className="text-indigo-600 hover:text-indigo-900 mr-4"
-                      >
-                        编辑
-                      </button>
-                      <button
-                        onClick={() => handleDeleteChannel(channel.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        删除
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    频道名称
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    状态
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    分类
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    URL
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <SortableContext
+                items={filteredChannels.map(ch => ch.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredChannels.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                        暂无频道数据
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredChannels.map((channel) => (
+                      <SortableChannelRow
+                        key={channel.id}
+                        channel={channel}
+                        isSelected={selectedChannels.has(channel.id)}
+                        onToggle={() => handleToggleChannel(channel.id)}
+                        onEdit={() => openEditModal(channel)}
+                        onDelete={() => handleDeleteChannel(channel.id)}
+                        getStatusBadge={getStatusBadge}
+                        isDraggable={canDragSort}
+                      />
+                    ))
+                  )}
+                </tbody>
+              </SortableContext>
+            </table>
+          </DndContext>
         </div>
 
         <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">

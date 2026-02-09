@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkAuth, unauthorizedResponse } from '@/lib/auth';
 import { getChannelData } from '@/lib/data';
 import { generateTxtFile, generateM3uFile } from '@/lib/parser';
 
 /**
- * GET - 导出频道列表
+ * GET - 导出频道列表（需要认证）
  */
 export async function GET(request: NextRequest) {
+  // 认证检查
+  if (!checkAuth(request)) {
+    return unauthorizedResponse();
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format') || 'txt'; // txt | m3u
