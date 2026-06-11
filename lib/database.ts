@@ -55,6 +55,18 @@ export function getDatabase(): Database.Database {
     // 启用 WAL 模式（提高并发性能）
     db.pragma('journal_mode = WAL');
 
+    // 设置同步模式为 NORMAL（在 WAL 模式下安全且更快）
+    db.pragma('synchronous = NORMAL');
+
+    // 增加缓存大小（默认 2MB，提高查询性能）
+    db.pragma('cache_size = -2000');
+
+    // 启用外键约束
+    db.pragma('foreign_keys = ON');
+
+    // 设置临时存储为内存（提高排序和临时表性能）
+    db.pragma('temp_store = MEMORY');
+
     // 初始化数据库表结构
     initializeTables();
 

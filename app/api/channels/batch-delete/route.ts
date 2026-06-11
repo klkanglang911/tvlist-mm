@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth';
-import { getChannelData, saveChannelData } from '@/lib/data';
+import { deleteChannels, getChannelData } from '@/lib/data';
 import type { ApiResponse } from '@/types';
 
 /**
@@ -27,18 +27,14 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // 只读取一次数据
+    // 获取要删除的频道名称（用于响应）
     const data = await getChannelData();
-
-    // 找出要删除的频道名称（用于 commit message）
     const deletedNames = data.channels
       .filter(ch => ids.includes(ch.id))
       .map(ch => ch.name);
 
-    // 过滤掉要删除的频道
-    const originalLength = data.channels.length;
-    data.channels = data.channels.filter(ch => !ids.includes(ch.id));
-    const deletedCount = originalLength - data.channels.length;
+    // 使用批量删除函数
+    const deletedCount = deleteChannels(ids);
 
     if (deletedCount === 0) {
       return NextResponse.json<ApiResponse>({
@@ -46,10 +42,6 @@ export async function POST(request: NextRequest) {
         error: '没有找到要删除的频道',
       }, { status: 404 });
     }
-
-    data.lastUpdated = new Date().toISOString();
-
-    await saveChannelData(data);
 
     return NextResponse.json<ApiResponse>({
       success: true,

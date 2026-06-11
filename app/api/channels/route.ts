@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAuth, unauthorizedResponse } from '@/lib/auth';
-import { getChannelData, saveChannelData } from '@/lib/data';
+import { addChannel, updateChannel, deleteChannel, getChannel, getChannelData } from '@/lib/data';
 import type { ApiResponse, Channel } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -43,22 +43,19 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // 获取当前最大 order 值
     const data = await getChannelData();
+    const maxOrder = data.channels.length > 0
+      ? Math.max(...data.channels.map(ch => ch.order))
+      : 0;
 
-    const newChannel: Channel = {
+    const newChannel = addChannel({
       id: uuidv4(),
       name,
       url,
       category: category || '其他',
-      order: data.channels.length,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    data.channels.push(newChannel);
-    data.lastUpdated = new Date().toISOString();
-
-    await saveChannelData(data);
+      order: maxOrder + 1,
+    });
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -94,29 +91,33 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const data = await getChannelData();
-    const channelIndex = data.channels.findIndex(ch => ch.id === id);
-
-    if (channelIndex === -1) {
+    // 检查频道是否存在
+    const existingChannel = getChannel(id);
+    if (!existingChannel) {
       return NextResponse.json<ApiResponse>({
         success: false,
         error: '频道不存在',
       }, { status: 404 });
     }
 
-    const updatedChannel = {
-      ...data.channels[channelIndex],
-      ...(name !== undefined && { name }),
-      ...(url !== undefined && { url }),
-      ...(category !== undefined && { category }),
-      ...(order !== undefined && { order }),
-      updatedAt: new Date().toISOString(),
-    };
+    // 使用目标更新函数
+    const updates: Partial<Omit<Channel, 'id' | 'createdAt'>> = {};
+    if (name !== undefined) updates.name = name;
+    if (url !== undefined) updates.url = url;
+    if (category !== undefined) updates.category = category;
+    if (order !== undefined) updates.order = order;
 
-    data.channels[channelIndex] = updatedChannel;
-    data.lastUpdated = new Date().toISOString();
+    const success = updateChannel(id, updates);
 
-    await saveChannelData(data);
+    if (!success) {
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: '更新失败',
+      }, { status: 500 });
+    }
+
+    // 返回更新后的频道
+    const updatedChannel = getChannel(id);
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -151,21 +152,24 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const data = await getChannelData();
-    const channelIndex = data.channels.findIndex(ch => ch.id === id);
-
-    if (channelIndex === -1) {
+    // 检查频道是否存在
+    const existingChannel = getChannel(id);
+    if (!existingChannel) {
       return NextResponse.json<ApiResponse>({
         success: false,
         error: '频道不存在',
       }, { status: 404 });
     }
 
-    const deletedChannel = data.channels[channelIndex];
-    data.channels.splice(channelIndex, 1);
-    data.lastUpdated = new Date().toISOString();
+    // 使用目标删除函数
+    const success = deleteChannel(id);
 
-    await saveChannelData(data);
+    if (!success) {
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: '删除失败',
+      }, { status: 500 });
+    }
 
     return NextResponse.json<ApiResponse>({
       success: true,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, memo } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -20,7 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { Channel, Category, TestProgress, ScheduleConfig, WebhookConfig } from '@/types';
 
-// 可排序的频道行组件
+// 可排序的频道行组件（使用 memo 优化）
 interface SortableChannelRowProps {
   channel: Channel;
   isSelected: boolean;
@@ -31,7 +31,7 @@ interface SortableChannelRowProps {
   isDraggable: boolean;
 }
 
-function SortableChannelRow({
+const SortableChannelRow = memo(function SortableChannelRow({
   channel,
   isSelected,
   onToggle,
@@ -113,7 +113,7 @@ function SortableChannelRow({
       </td>
     </tr>
   );
-}
+});
 
 export default function DashboardPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -360,7 +360,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteChannel = async (id: string) => {
+  const handleDeleteChannel = useCallback(async (id: string) => {
     if (!confirm('确定要删除这个频道吗？')) return;
 
     try {
@@ -371,7 +371,7 @@ export default function DashboardPage() {
       const data = await response.json();
 
       if (data.success) {
-        setChannels(channels.filter(ch => ch.id !== id));
+        setChannels(prev => prev.filter(ch => ch.id !== id));
         alert('删除成功！');
       } else {
         alert(data.error || '删除失败');
@@ -379,34 +379,38 @@ export default function DashboardPage() {
     } catch (error) {
       alert('网络错误');
     }
-  };
+  }, []);
 
-  const openEditModal = (channel: Channel) => {
+  const openEditModal = useCallback((channel: Channel) => {
     setEditingChannel(channel);
     setFormData({
       name: channel.name,
       url: channel.url,
       category: channel.category,
     });
-  };
+  }, []);
 
-  const handleToggleChannel = (channelId: string) => {
-    const newSelected = new Set(selectedChannels);
-    if (newSelected.has(channelId)) {
-      newSelected.delete(channelId);
-    } else {
-      newSelected.add(channelId);
-    }
-    setSelectedChannels(newSelected);
-  };
+  const handleToggleChannel = useCallback((channelId: string) => {
+    setSelectedChannels(prev => {
+      const newSelected = new Set(prev);
+      if (newSelected.has(channelId)) {
+        newSelected.delete(channelId);
+      } else {
+        newSelected.add(channelId);
+      }
+      return newSelected;
+    });
+  }, []);
 
-  const handleToggleAll = () => {
-    if (selectedChannels.size === filteredChannels.length) {
-      setSelectedChannels(new Set());
-    } else {
-      setSelectedChannels(new Set(filteredChannels.map(ch => ch.id)));
-    }
-  };
+  const handleToggleAll = useCallback(() => {
+    setSelectedChannels(prev => {
+      if (prev.size === filteredChannels.length) {
+        return new Set();
+      } else {
+        return new Set(filteredChannels.map(ch => ch.id));
+      }
+    });
+  }, [filteredChannels]);
 
   const handleBatchDelete = async () => {
     if (selectedChannels.size === 0) {
@@ -441,7 +445,7 @@ export default function DashboardPage() {
     }
   };
 
-  const getStatusBadge = (channel: Channel) => {
+  const getStatusBadge = useCallback((channel: Channel) => {
     const status = channel.status || 'unknown';
     const colors = {
       online: 'bg-green-100 text-green-800',
@@ -471,19 +475,39 @@ export default function DashboardPage() {
         )}
       </div>
     );
-  };
+  }, []);
 
-  const filteredChannels = channels.filter(channel => {
-    const matchesCategory = selectedCategory === 'all' || channel.category === selectedCategory;
-    const matchesSearch = channel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         channel.url.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // 使用 useMemo 缓存过滤后的频道列表
+  const filteredChannels = useMemo(() => {
+    return channels.filter(channel => {
+      const matchesCategory = selectedCategory === 'all' || channel.category === selectedCategory;
+      const matchesSearch = channel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           channel.url.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [channels, selectedCategory, searchTerm]);
 
-  // 统计在线/离线数量
-  const onlineCount = channels.filter(ch => ch.status === 'online').length;
-  const offlineCount = channels.filter(ch => ch.status === 'offline').length;
-  const offlineChannels = channels.filter(ch => ch.status === 'offline');
+  // 使用 useMemo 缓存统计数据
+  const { onlineCount, offlineCount, offlineChannels } = useMemo(() => {
+    let online = 0;
+    let offline = 0;
+    const offlineList: Channel[] = [];
+
+    for (const ch of channels) {
+      if (ch.status === 'online') {
+        online++;
+      } else if (ch.status === 'offline') {
+        offline++;
+        offlineList.push(ch);
+      }
+    }
+
+    return {
+      onlineCount: online,
+      offlineCount: offline,
+      offlineChannels: offlineList,
+    };
+  }, [channels]);
 
   // 拖拽排序相关
   const sensors = useSensors(

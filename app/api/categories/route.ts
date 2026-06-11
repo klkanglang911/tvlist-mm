@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkAuth, unauthorizedResponse } from '@/lib/auth';
-import { getChannelData, saveChannelData } from '@/lib/data';
+import { addCategory, updateCategory, deleteCategory, getChannelData, getDatabase } from '@/lib/data';
 import type { ApiResponse } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -43,9 +43,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const data = await getChannelData();
-
     // 检查是否已存在
+    const data = await getChannelData();
     if (data.categories.some(cat => cat.name === name)) {
       return NextResponse.json<ApiResponse>({
         success: false,
@@ -53,16 +52,12 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const newCategory = {
+    // 使用目标添加函数
+    const newCategory = addCategory({
       id: uuidv4(),
       name,
       order: data.categories.length,
-    };
-
-    data.categories.push(newCategory);
-    data.lastUpdated = new Date().toISOString();
-
-    await saveChannelData(data);
+    });
 
     return NextResponse.json<ApiResponse>({
       success: true,
@@ -98,33 +93,39 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // 获取旧分类名称
     const data = await getChannelData();
-    const categoryIndex = data.categories.findIndex(cat => cat.id === id);
+    const oldCategory = data.categories.find(cat => cat.id === id);
 
-    if (categoryIndex === -1) {
+    if (!oldCategory) {
       return NextResponse.json<ApiResponse>({
         success: false,
         error: '分类不存在',
       }, { status: 404 });
     }
 
-    const oldName = data.categories[categoryIndex].name;
-    data.categories[categoryIndex].name = name;
+    const oldName = oldCategory.name;
 
-    // 更新所有使用该分类的频道
-    data.channels.forEach(channel => {
-      if (channel.category === oldName) {
-        channel.category = name;
-        channel.updatedAt = new Date().toISOString();
-      }
-    });
+    // 使用目标更新函数
+    const success = updateCategory(id, { name });
 
-    data.lastUpdated = new Date().toISOString();
-    await saveChannelData(data);
+    if (!success) {
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: '更新失败',
+      }, { status: 500 });
+    }
+
+    // 如果分类名称改变了，更新所有使用该分类的频道
+    if (oldName !== name) {
+      const db = getDatabase();
+      const now = new Date().toISOString();
+      db.prepare('UPDATE channels SET category = ?, updatedAt = ? WHERE category = ?').run(name, now, oldName);
+    }
 
     return NextResponse.json<ApiResponse>({
       success: true,
-      data: data.categories[categoryIndex],
+      data: { id, name },
       message: '分类更新成功',
     });
   } catch (error) {
@@ -155,30 +156,31 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // 获取分类名称
     const data = await getChannelData();
-    const categoryIndex = data.categories.findIndex(cat => cat.id === id);
+    const category = data.categories.find(cat => cat.id === id);
 
-    if (categoryIndex === -1) {
+    if (!category) {
       return NextResponse.json<ApiResponse>({
         success: false,
         error: '分类不存在',
       }, { status: 404 });
     }
 
-    const deletedCategory = data.categories[categoryIndex];
-
     // 将该分类的频道移到"其他"
-    data.channels.forEach(channel => {
-      if (channel.category === deletedCategory.name) {
-        channel.category = '其他';
-        channel.updatedAt = new Date().toISOString();
-      }
-    });
+    const db = getDatabase();
+    const now = new Date().toISOString();
+    db.prepare('UPDATE channels SET category = ?, updatedAt = ? WHERE category = ?').run('其他', now, category.name);
 
-    data.categories.splice(categoryIndex, 1);
-    data.lastUpdated = new Date().toISOString();
+    // 使用目标删除函数
+    const success = deleteCategory(id);
 
-    await saveChannelData(data);
+    if (!success) {
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: '删除失败',
+      }, { status: 500 });
+    }
 
     return NextResponse.json<ApiResponse>({
       success: true,

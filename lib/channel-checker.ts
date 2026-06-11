@@ -216,6 +216,19 @@ export async function testAllChannels(
     const results: ChannelTestResult[] = [];
     const concurrencyLimit = CONFIG.CONCURRENCY_LIMIT;
 
+    // 创建事务函数，用于批量更新数据库
+    const updateBatchInTransaction = db.transaction((batchResults: ChannelTestResult[]) => {
+      for (const result of batchResults) {
+        updateStmt.run(
+          result.status,
+          result.responseTime || null,
+          result.testedAt,
+          result.errorMessage || null,
+          result.channelId
+        );
+      }
+    });
+
     // 将频道分成批次
     for (let i = 0; i < channels.length; i += concurrencyLimit) {
       // 检查是否被取消
@@ -253,6 +266,7 @@ export async function testAllChannels(
       const batchResults = await Promise.allSettled(batchPromises);
 
       // 处理结果
+      const batchTestResults: ChannelTestResult[] = [];
       for (let j = 0; j < batchResults.length; j++) {
         const settledResult = batchResults[j];
         let result: ChannelTestResult;
@@ -273,16 +287,11 @@ export async function testAllChannels(
         results.push(result);
         currentTestProgress.results.push(result);
         currentTestProgress.completed = results.length;
-
-        // 更新数据库
-        updateStmt.run(
-          result.status,
-          result.responseTime || null,
-          result.testedAt,
-          result.errorMessage || null,
-          result.channelId
-        );
+        batchTestResults.push(result);
       }
+
+      // 使用事务批量更新数据库（减少 fsync 开销）
+      updateBatchInTransaction(batchTestResults);
 
       // 通知进度
       if (onProgress) {

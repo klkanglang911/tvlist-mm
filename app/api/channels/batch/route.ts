@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth';
-import { getChannelData, saveChannelData } from '@/lib/data';
+import { getDatabase } from '@/lib/data';
 import type { ApiResponse } from '@/types';
 
 /**
@@ -26,18 +26,21 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const data = await getChannelData();
+    // 使用批量更新，而不是全表重写
+    const db = getDatabase();
+    const now = new Date().toISOString();
 
-    channels.forEach(({ id, order }) => {
-      const channel = data.channels.find(ch => ch.id === id);
-      if (channel) {
-        channel.order = order;
-        channel.updatedAt = new Date().toISOString();
+    const updateStmt = db.prepare('UPDATE channels SET "order" = ?, updatedAt = ? WHERE id = ?');
+
+    // 使用事务批量更新
+    db.transaction(() => {
+      for (const { id, order } of channels) {
+        updateStmt.run(order, now, id);
       }
-    });
 
-    data.lastUpdated = new Date().toISOString();
-    await saveChannelData(data);
+      // 更新 lastUpdated 元数据
+      db.prepare('UPDATE metadata SET value = ? WHERE key = ?').run(now, 'lastUpdated');
+    })();
 
     return NextResponse.json<ApiResponse>({
       success: true,

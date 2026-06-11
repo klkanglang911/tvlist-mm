@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getChannelData, saveChannelData } from '@/lib/data';
+import { getChannelData, updateAccessKey } from '@/lib/data';
 import { generateTxtFile } from '@/lib/parser';
 import type { ChannelData } from '@/types';
 
@@ -93,18 +93,12 @@ async function verifyAccessKey(key: string | null): Promise<{ isValid: boolean; 
 
 /**
  * 更新密钥的最后使用时间（异步，不阻塞主流程）
+ * 使用目标更新函数，而不是全表重写
  */
-async function updateKeyLastUsed(data: ChannelData, keyId: string): Promise<void> {
+function updateKeyLastUsed(keyId: string): void {
   try {
-    const accessKeys = data.accessKeys || [];
-    const key = accessKeys.find(k => k.id === keyId);
-
-    if (key) {
-      key.lastUsedAt = new Date().toISOString();
-      data.accessKeys = accessKeys;
-      // 不更新 lastUpdated，因为这不是用户主动的数据修改
-      await saveChannelData(data);
-    }
+    const now = new Date().toISOString();
+    updateAccessKey(keyId, { lastUsedAt: now });
   } catch (error) {
     // 静默失败，不影响主流程
     console.error('更新密钥使用时间失败:', error);
@@ -203,11 +197,9 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. 如果使用的是数据库密钥，更新最后使用时间（异步，不阻塞）
-    if (verifyResult.keyId && verifyResult.data) {
-      // 使用 Promise 但不等待，避免阻塞响应
-      updateKeyLastUsed(verifyResult.data, verifyResult.keyId).catch(err => {
-        console.error('后台更新密钥使用时间失败:', err);
-      });
+    if (verifyResult.keyId) {
+      // 使用目标更新函数，而不是全表重写
+      updateKeyLastUsed(verifyResult.keyId);
     }
 
     // 4. 生成频道列表
@@ -221,9 +213,8 @@ export async function GET(request: NextRequest) {
     return new NextResponse(content, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
+        // 添加短期缓存，减少数据库访问
+        'Cache-Control': 'public, max-age=60',
       },
     });
   } catch (error) {
