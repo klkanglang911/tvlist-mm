@@ -381,6 +381,38 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // 使用 useMemo 缓存过滤后的频道列表
+  const filteredChannels = useMemo(() => {
+    return channels.filter(channel => {
+      const matchesCategory = selectedCategory === 'all' || channel.category === selectedCategory;
+      const matchesSearch = channel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           channel.url.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [channels, selectedCategory, searchTerm]);
+
+  // 使用 useMemo 缓存统计数据
+  const { onlineCount, offlineCount, offlineChannels } = useMemo(() => {
+    let online = 0;
+    let offline = 0;
+    const offlineList: Channel[] = [];
+
+    for (const ch of channels) {
+      if (ch.status === 'online') {
+        online++;
+      } else if (ch.status === 'offline') {
+        offline++;
+        offlineList.push(ch);
+      }
+    }
+
+    return {
+      onlineCount: online,
+      offlineCount: offline,
+      offlineChannels: offlineList,
+    };
+  }, [channels]);
+
   const openEditModal = useCallback((channel: Channel) => {
     setEditingChannel(channel);
     setFormData({
@@ -476,38 +508,6 @@ export default function DashboardPage() {
       </div>
     );
   }, []);
-
-  // 使用 useMemo 缓存过滤后的频道列表
-  const filteredChannels = useMemo(() => {
-    return channels.filter(channel => {
-      const matchesCategory = selectedCategory === 'all' || channel.category === selectedCategory;
-      const matchesSearch = channel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           channel.url.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-  }, [channels, selectedCategory, searchTerm]);
-
-  // 使用 useMemo 缓存统计数据
-  const { onlineCount, offlineCount, offlineChannels } = useMemo(() => {
-    let online = 0;
-    let offline = 0;
-    const offlineList: Channel[] = [];
-
-    for (const ch of channels) {
-      if (ch.status === 'online') {
-        online++;
-      } else if (ch.status === 'offline') {
-        offline++;
-        offlineList.push(ch);
-      }
-    }
-
-    return {
-      onlineCount: online,
-      offlineCount: offline,
-      offlineChannels: offlineList,
-    };
-  }, [channels]);
 
   // 拖拽排序相关
   const sensors = useSensors(
