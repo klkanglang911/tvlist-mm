@@ -41,7 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 # sensitive files
-tv.txt
+/tv.txt
 
 # test scripts
 test-*.sh
