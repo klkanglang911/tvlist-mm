@@ -5,6 +5,9 @@
 import type { ChannelData, Channel, Category, AccessKey } from '@/types';
 import { getDatabase, runInTransaction } from './database';
 
+// 导出 getDatabase 供其他模块使用
+export { getDatabase };
+
 /**
  * 从 SQLite 读取完整的频道数据
  */

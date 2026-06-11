@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getChannelData } from '@/lib/data';
 import { generateM3uFile } from '@/lib/parser';
-import { verifyAccessKey, checkRateLimit, getClientIP, updateKeyLastUsed } from '../tv.txt/route';
+import { verifyAccessKey, checkRateLimit, getClientIP, updateKeyLastUsed } from '@/lib/tv-endpoint-utils';
 
 /**
  * GET - 受保护的 M3U 播放列表（需要访问密钥）
