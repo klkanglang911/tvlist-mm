@@ -48,7 +48,7 @@ startRateLimitCleanup();
  * 验证访问密钥（混合模式：数据库优先，环境变量兜底）
  * @returns { isValid: boolean, keyId?: string } - 验证结果和密钥ID（如果是数据库密钥）
  */
-async function verifyAccessKey(key: string | null): Promise<{ isValid: boolean; keyId?: string; data?: ChannelData }> {
+export async function verifyAccessKey(key: string | null): Promise<{ isValid: boolean; keyId?: string; data?: ChannelData }> {
   if (!key) {
     return { isValid: false };
   }
@@ -95,7 +95,7 @@ async function verifyAccessKey(key: string | null): Promise<{ isValid: boolean; 
  * 更新密钥的最后使用时间（异步，不阻塞主流程）
  * 使用目标更新函数，而不是全表重写
  */
-function updateKeyLastUsed(keyId: string): void {
+export function updateKeyLastUsed(keyId: string): void {
   try {
     const now = new Date().toISOString();
     updateAccessKey(keyId, { lastUsedAt: now });
@@ -108,7 +108,7 @@ function updateKeyLastUsed(keyId: string): void {
 /**
  * 检查速率限制
  */
-function checkRateLimit(ip: string): boolean {
+export function checkRateLimit(ip: string): boolean {
   const limit = parseInt(process.env.TV_TXT_RATE_LIMIT || '60', 10);
   const now = Date.now();
   const hourInMs = 60 * 60 * 1000;
@@ -147,7 +147,7 @@ function checkRateLimit(ip: string): boolean {
 /**
  * 获取客户端 IP
  */
-function getClientIP(request: NextRequest): string {
+export function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   const realIP = request.headers.get('x-real-ip');
 
