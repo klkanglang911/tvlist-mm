@@ -127,6 +127,10 @@ export default function DashboardPage() {
   const [batchContent, setBatchContent] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set());
 
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20); // 默认每页 20 条
+
   // 测试相关状态
   const [testProgress, setTestProgress] = useState<TestProgress | null>(null);
   const [showTestProgress, setShowTestProgress] = useState(false);
@@ -391,6 +395,23 @@ export default function DashboardPage() {
     });
   }, [channels, selectedCategory, searchTerm]);
 
+  // 分页计算
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredChannels.length / pageSize);
+  }, [filteredChannels.length, pageSize]);
+
+  // 计算当前页的频道列表
+  const paginatedChannels = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredChannels.slice(startIndex, endIndex);
+  }, [filteredChannels, currentPage, pageSize]);
+
+  // 重置页码（当筛选条件变化时）
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, searchTerm, pageSize]);
+
   // 使用 useMemo 缓存统计数据
   const { onlineCount, offlineCount, offlineChannels } = useMemo(() => {
     let online = 0;
@@ -436,13 +457,22 @@ export default function DashboardPage() {
 
   const handleToggleAll = useCallback(() => {
     setSelectedChannels(prev => {
-      if (prev.size === filteredChannels.length) {
-        return new Set();
+      const currentPageIds = paginatedChannels.map(ch => ch.id);
+      const allCurrentPageSelected = currentPageIds.every(id => prev.has(id));
+
+      if (allCurrentPageSelected) {
+        // 取消当前页的选择
+        const newSelected = new Set(prev);
+        currentPageIds.forEach(id => newSelected.delete(id));
+        return newSelected;
       } else {
-        return new Set(filteredChannels.map(ch => ch.id));
+        // 选择当前页的所有频道
+        const newSelected = new Set(prev);
+        currentPageIds.forEach(id => newSelected.add(id));
+        return newSelected;
       }
     });
-  }, [filteredChannels]);
+  }, [paginatedChannels]);
 
   const handleBatchDelete = async () => {
     if (selectedChannels.size === 0) {
@@ -700,7 +730,7 @@ export default function DashboardPage() {
                       {canDragSort && <span className="w-4"></span>}
                       <input
                         type="checkbox"
-                        checked={filteredChannels.length > 0 && selectedChannels.size === filteredChannels.length}
+                        checked={paginatedChannels.length > 0 && paginatedChannels.every(ch => selectedChannels.has(ch.id))}
                         onChange={handleToggleAll}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
@@ -724,18 +754,18 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <SortableContext
-                items={filteredChannels.map(ch => ch.id)}
+                items={paginatedChannels.map(ch => ch.id)}
                 strategy={verticalListSortingStrategy}
               >
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredChannels.length === 0 ? (
+                  {paginatedChannels.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                         暂无频道数据
                       </td>
                     </tr>
                   ) : (
-                    filteredChannels.map((channel) => (
+                    paginatedChannels.map((channel) => (
                       <SortableChannelRow
                         key={channel.id}
                         channel={channel}
@@ -754,11 +784,94 @@ export default function DashboardPage() {
           </DndContext>
         </div>
 
+        {/* 分页控件 */}
         <div className="bg-gray-50 px-6 py-3 border-t border-gray-200">
-          <p className="text-sm text-gray-700">
-            共 <span className="font-medium">{filteredChannels.length}</span> 个频道
-            {selectedCategory !== 'all' && ` (分类: ${selectedCategory})`}
-          </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-gray-700">
+                共 <span className="font-medium">{filteredChannels.length}</span> 个频道
+                {selectedCategory !== 'all' && ` (分类: ${selectedCategory})`}
+              </p>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">每页显示:</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  上一页
+                </button>
+
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-1 border rounded text-sm ${
+                          currentPage === pageNum
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'border-gray-300 hover:bg-gray-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  {totalPages > 5 && currentPage < totalPages - 2 && (
+                    <>
+                      <span className="text-gray-500">...</span>
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100"
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  下一页
+                </button>
+
+                <span className="text-sm text-gray-600 ml-2">
+                  第 {currentPage}/{totalPages} 页
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
